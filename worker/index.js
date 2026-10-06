@@ -1,4 +1,7 @@
-// intel.connectionguard.net: serves the latest build from the `lists` branch, cached at the edge for 15 minutes.
+// intel.connectionguard.net: serves the latest build from the `lists` branch, cached at the edge.
+// manifest.json and its signature are cached for one minute, so they always belong together; lists for 15 minutes.
+// Right after a daily build a cached list can still be the previous one: its sha256 then fails the plugin's check and
+// the plugin keeps its current data and tries again later.
 // The plugin verifies manifest.json.sig and every list's sha256 itself; this Worker only delivers bytes.
 const ORIGIN = "https://raw.githubusercontent.com/gerolndnr/connection-guard-intel/lists/";
 const FILES = new Map([
@@ -23,7 +26,7 @@ export default {
       const upstream = await fetch(ORIGIN + name);
       if (!upstream.ok) return new Response("lists temporarily unavailable\n", { status: 502 });
       response = new Response(await upstream.arrayBuffer(), { headers: {
-        "content-type": type, "cache-control": "public, max-age=900", "x-robots-tag": "noindex", "access-control-allow-origin": "*",
+        "content-type": type, "cache-control": `public, max-age=${name.startsWith("manifest") ? 60 : 900}`, "x-robots-tag": "noindex", "access-control-allow-origin": "*",
       } });
       ctx.waitUntil(caches.default.put(key, response.clone()));
     }
