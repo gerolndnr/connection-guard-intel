@@ -1,8 +1,7 @@
 """Every data source: where it comes from, under which terms, and how its answer becomes entries.
 
 Parsers take the raw answer bytes, so tests run them on recorded fixtures without network access.
-`redistribute` records the Phase 0 review (SOURCES.md): sources without clear terms are fetched for evaluation
-but kept out of the published lists until the owner decides.
+`redistribute` records the review in SOURCES.md: a source that is not cleared is fetched for evaluation only.
 """
 import csv
 import io
@@ -190,12 +189,13 @@ SOURCES = [
            parse_operator_asn(f'operator-asn-{asn}'), f'RIPEstat (RIS) announced prefixes of AS{asn} {name}; RIPE NCC terms, attribution.', True)
     for asn, name in VPN_OPERATOR_ASNS.items()
 ] + [
-    # VPN operators: the server lists their own apps load. Facts (addresses), but no licence; see SOURCES.md.
-    Source('mullvad', VPN, 'https://api.mullvad.net/www/relays/all/', parse_mullvad, 'Public relay API, no licence text.', False),
+    # VPN operators: the server lists their own apps load. Only the addresses are published, with attribution and a
+    # takedown route (SOURCES.md); the owner decided on 6 October 2026 to include them.
+    Source('mullvad', VPN, 'https://api.mullvad.net/www/relays/all/', parse_mullvad, 'Public relay API, no licence text.', True),
     Source('nordvpn', VPN, 'https://api.nordvpn.com/v1/servers?limit=20000&fields[station]=1&fields[ipv6_station]=1&fields[hostname]=1',
-           parse_nordvpn, 'Undocumented public API used by its apps, no licence text.', False),
-    Source('ivpn', VPN, 'https://api.ivpn.net/v4/servers.json', parse_ivpn, 'Public server list used by its open-source apps, no licence text.', False),
-    Source('pia', VPN, 'https://serverlist.piaservers.net/vpninfo/servers/v6', parse_pia, 'Public server list used by its apps, no licence text.', False),
+           parse_nordvpn, 'Undocumented public API used by its apps, no licence text.', True),
+    Source('ivpn', VPN, 'https://api.ivpn.net/v4/servers.json', parse_ivpn, 'Public server list used by its open-source apps, no licence text.', True),
+    Source('pia', VPN, 'https://serverlist.piaservers.net/vpninfo/servers/v6', parse_pia, 'Public server list used by its apps, no licence text.', True),
     Source('surfshark', VPN, 'https://api.surfshark.com/v4/server/clusters/generic', parse_surfshark,
-           'Public cluster list (host names, resolved by DNS), no licence text.', False),
+           'Public cluster list (host names, resolved by DNS), no licence text.', True),
 ]

@@ -3,7 +3,7 @@ on:
   schedule: [{ cron: '17 3 * * *' }]
   workflow_dispatch:
   push: { branches: [main] }
-permissions: { contents: read }
+permissions: { contents: write }
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -23,4 +23,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'push'
         with: { name: lists, path: dist }
-      # Publication to intel.connectionguard.net is added once the owner has decided on the operator lists.
+      # intel.connectionguard.net serves the branch `lists`, which holds exactly one commit: the latest build.
+      - name: Publish to the lists branch
+        if: github.event_name != 'push'
+        run: |
+          cd dist
+          git init -q -b lists
+          git -c user.name="intel build" -c user.email="actions@users.noreply.github.com" add -A
+          git -c user.name="intel build" -c user.email="actions@users.noreply.github.com" commit -q -m "Lists as of $(python -c 'import json;print(json.load(open("manifest.json"))["as_of"])')"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" lists
