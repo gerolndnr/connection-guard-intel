@@ -22,7 +22,7 @@ Each source is fetched without a key. `redistribute` (in `intel/sources.py`) say
 | OVPN server API | VPN | Public API used by its apps, no licence text | yes (added 7 Oct 2026) |
 | AzireVPN locations (pool host names, resolved by DNS) | VPN | Public API, no licence text | yes (added 7 Oct 2026) |
 | PrivateVPN, vpn.ac, FastestVPN server pages (host names, resolved by DNS) | VPN | Public web pages, no licence text | yes (added 7 Oct 2026) |
-| Proton logicals | VPN | Rejected without app headers; we do not imitate an app | no |
+| Proton logicals | VPN | Needs a Proton login since 2026 ("Invalid access token"); we use no accounts and imitate no app. ProtonVPN is covered by Proton AG's VPN networks (below) and the hosting rules | no |
 | VPN Gate | VPN | Volunteers' home connections that rotate hourly; not used | no |
 | Vultr geofeed | HOSTING | To be added (TLS chain issue on the test machine only) | – |
 
@@ -56,4 +56,7 @@ The rules were chosen by leaving each of the 14 operators out of the build in tu
   - AS39351 31173 Services AB is Mullvad's.
   - AS136787, AS147049, AS207137 and AS141039 PacketHub S.A. belong to Nord Security.
   - AS62651, AS140952 and AS22781 Strong Technology LLC run StrongVPN and IPVanish (Ziff Davis), whose published servers sit there.
+  - AS209103, AS199218 and AS208172 are registered to Proton AG as "ProtonVPN", "ProtonVPN-2" and "PV-HOSTED" (RIPE). AS62371, Proton's mail and company network, is not listed.
+
+    A one-off spot check on 7 October 2026 resolved 176 ProtonVPN entry servers from the host names in its configuration files (30 countries). Nothing was published from it. Before Proton's networks were added, 82 % of those servers were already on the list, through the hosting rules (M247, Datacamp); with them, 89 %.
 - The hosting ASNs added on 7 October 2026 come from where the 14 published server lists actually sit (bgp.tools prefix table), reviewed by name. Transit carriers (Cogent, GTT) and a consumer ISP (Afrihost) were left out.

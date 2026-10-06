@@ -213,6 +213,7 @@ HOSTING_ASNS = {
     63473: 'HostHatch', 197706: 'Keminet', 50304: 'Blix Solutions', 55720: 'Gigabit Hosting', 43289: 'Trabia',
     53356: 'Free Range Cloud Hosting', 42831: 'UK Dedicated Servers', 397423: 'Tier.Net', 46664: 'VolumeDrive',
     400587: 'Ryamer', 41564: 'Orion Network', 394256: 'Tech Futures Interactive', 133480: '5G Network Operations',
+    4785: 'xTom', 3258: 'xTom Japan',
 }
 
 # Networks that VPN operators run themselves: everything announced there is VPN infrastructure, whatever the
@@ -224,6 +225,10 @@ VPN_OPERATOR_ASNS = {
     147049: 'PacketHub S.A. (Nord Security)', 207137: 'PacketHub S.A. (Nord Security)', 141039: 'PacketHub S.A. (Nord Security)',
     62651: 'Strong Technology (StrongVPN, IPVanish)', 140952: 'Strong Technology (StrongVPN, IPVanish)',
     22781: 'Strong Technology (StrongVPN, IPVanish)',
+    # ProtonVPN: its server API needs a login since 2026, so Proton is covered by the networks Proton AG runs for its
+    # VPN (RIPE holders "ProtonVPN", "ProtonVPN-2", "PV-HOSTED") and by the hosting rules. AS62371 is Proton's mail
+    # and company network and is not listed.
+    209103: 'ProtonVPN (Proton AG)', 199218: 'ProtonVPN-2 (Proton AG)', 208172: 'PV-HOSTED (Proton AG)',
 }
 
 
