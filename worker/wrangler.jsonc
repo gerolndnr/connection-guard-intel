@@ -1,0 +1,8 @@
+{
+  "$schema": "../../cloud/apps/api/node_modules/wrangler/config-schema.json",
+  "name": "connection-guard-intel",
+  "main": "index.js",
+  "compatibility_date": "2026-08-15",
+  "routes": [{ "pattern": "intel.connectionguard.net", "custom_domain": true }],
+  "workers_dev": false
+}
