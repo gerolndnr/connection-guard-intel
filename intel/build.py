@@ -39,7 +39,8 @@ def collect(sources, attempts=3):
         if status == 'ok' and not got:
             status, error = 'empty', 'parsed no usable networks'
         entries += got
-        report.append(dict(id=s.id, category=s.category, url=s.url, terms=s.terms, status=status, error=error, entries=len(got)))
+        report.append(dict(id=s.id, category=s.category, url=s.url, terms=s.terms, status=status, error=error, entries=len(got),
+                           optional=s.optional))
     return entries, report
 
 
@@ -228,7 +229,11 @@ def main(argv=None):
         print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r['error'] else ''))
     for c, l in m['lists'].items():
         print(f"{c:8} {l['networks']:>7} networks {l['addresses']:>14,} addresses {l['bytes']/1e6:5.2f} MB")
-    if any(r['status'] != 'ok' for r in m['sources']):
+    failed = [r for r in m['sources'] if r['status'] != 'ok']
+    for r in failed:
+        if r.get('optional'):
+            print(f"warning: optional source {r['id']} {r['status']}; its last addresses stay for {HISTORY_DAYS} days")
+    if any(not r.get('optional') for r in failed):
         sys.exit(2)
 
 

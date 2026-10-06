@@ -25,6 +25,9 @@ class Source:
     terms: str
     redistribute: bool
     headers: dict = field(default_factory=dict)
+    # Optional sources may fail without stopping the build (reported in the manifest; the 14-day history keeps their
+    # last addresses). Used for operators that block data-centre clients such as CI runners.
+    optional: bool = False
 
 
 def _lines(body):
@@ -269,7 +272,7 @@ SOURCES = [
     Source('windscribe', VPN, 'https://assets.windscribe.com/serverlist/mob-v2/1/0', parse_windscribe,
            'Public server list used by its apps, no licence text.', True),
     Source('ipvanish', VPN, 'https://configs.ipvanish.com/configs/configs.zip', openvpn_zip('ipvanish'),
-           'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True),
+           'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True, optional=True),
     Source('privadovpn', VPN, 'https://privadovpn.com/apps/ovpn_configs.zip', openvpn_zip('privadovpn'),
            'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True),
     Source('ovpn', VPN, 'https://www.ovpn.com/v2/api/client/entry', parse_ovpn, 'Public server API used by its apps, no licence text.', True),
