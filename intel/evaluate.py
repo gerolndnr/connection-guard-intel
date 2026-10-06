@@ -63,16 +63,19 @@ def main(argv=None):
     p.add_argument('--lists', default='eval')
     p.add_argument('--dataset', required=True)
     p.add_argument('--holdout', default='', help='operators to leave out of the VPN list, e.g. pia,surfshark')
+    p.add_argument('--dense-asn', type=int, default=None, help='with --holdout: the dense-ASN threshold to rebuild with')
     a = p.parse_args(argv)
     holdout = tuple(h for h in a.holdout.split(',') if h)
     items = [json.loads(l) for l in open(a.dataset)]
     indexes = {c: Index(load(os.path.join(a.lists, f'{c.lower()}.txt'))) for c in CATEGORIES}
     if holdout:
-        # Rebuild VPN from the cached per-source answers is not stored, so re-parse the sources without the held-out ones.
+        # Re-parse the sources without the held-out operators. Hosting ranges and operator networks stay in, because
+        # the inference rules need them; an operator ASN of a held-out operator is left out as well.
         from .build import collect, lists
-        from .sources import SOURCES
-        entries, _ = collect([s for s in SOURCES if s.category == VPN and s.id not in holdout])
-        indexes[VPN] = Index(lists(entries)[VPN])
+        from .sources import SOURCES, VPN_OPERATOR_ASNS
+        held_asns = {f'operator-asn-{asn}' for asn, name in VPN_OPERATOR_ASNS.items() if any(h.removesuffix('vpn') in name.lower() for h in holdout)}
+        entries, _ = collect([s for s in SOURCES if s.category in (VPN, HOSTING) and s.id not in holdout and s.id not in held_asns])
+        indexes[VPN] = Index(lists(entries, a.dense_asn)[VPN])
     rows = score(indexes, items, holdout)
     order = sorted(rows, key=lambda k: (k.split(' ')[0] not in POSITIVE_COHORTS, k))
     print(f"{'cohort':44}{'n':>5}{'blocked':>9}{'%':>6}{'relay':>7}{'hosting':>9}")

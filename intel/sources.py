@@ -6,7 +6,9 @@ Parsers take the raw answer bytes, so tests run them on recorded fixtures withou
 import csv
 import io
 import json
+import re
 import socket
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
@@ -117,6 +119,58 @@ def parse_surfshark(body, resolve=None):
     return vpn(resolve(hosts), 'surfshark')
 
 
+def parse_airvpn(body):
+    """AirVPN status API: up to four IPv4 and four IPv6 entry addresses per server (exits are the same addresses)."""
+    keys = [f'ip_v{v}_in{i}' for v in (4, 6) for i in range(1, 5)]
+    return vpn([s[k] for s in json.loads(body).get('servers', []) for k in keys if s.get(k)], 'airvpn')
+
+
+def parse_windscribe(body):
+    """Windscribe's public server list (the one its apps load): every node with its addresses ip, ip2 and ip3."""
+    texts = [node[k] for loc in json.loads(body).get('data', []) for group in loc.get('groups') or [] for node in group.get('nodes') or []
+             for k in ('ip', 'ip2', 'ip3') if node.get(k)]
+    return vpn(texts, 'windscribe')
+
+
+def parse_ovpn(body):
+    return vpn([s['ip'] for dc in json.loads(body).get('datacenters', []) for s in dc.get('servers', []) if s.get('ip')], 'ovpn')
+
+
+def parse_azirevpn(body, resolve=None):
+    hosts = sorted({loc['pool'] for loc in json.loads(body).get('locations', []) if loc.get('pool')})
+    return vpn((resolve or resolve_all)(hosts), 'azirevpn')
+
+
+def openvpn_zip(source, resolve=None):
+    """An operator's published OpenVPN configuration archive: every `remote` host, resolved by DNS."""
+    def parse(body):
+        hosts, literal = set(), []
+        with zipfile.ZipFile(io.BytesIO(body)) as z:
+            names = z.namelist()
+            if len(names) > 20_000:
+                raise ValueError(f'{source}: {len(names)} files in the archive')
+            for name in names:
+                if z.getinfo(name).file_size > 1_000_000:
+                    continue
+                for m in re.finditer(rb'^\s*remote\s+(\S+)', z.read(name), re.M):
+                    h = m.group(1).decode('ascii', 'replace')
+                    if net(h) is not None:
+                        literal.append(h)
+                    else:
+                        hosts.add(h)
+        return vpn(literal + (resolve or resolve_all)(sorted(hosts)), source)
+    return parse
+
+
+def page_hosts(source, pattern, resolve=None):
+    """An operator's public server page: host names matching the operator's own domain, resolved by DNS."""
+    rx = re.compile(pattern)
+    def parse(body):
+        hosts = sorted(set(rx.findall(body.decode('utf-8', 'replace'))))
+        return vpn((resolve or resolve_all)(hosts), source)
+    return parse
+
+
 def vpn(texts, source):
     out = []
     for t in texts:
@@ -147,6 +201,15 @@ HOSTING_ASNS = {
     42708: 'GleSYS',
     212238: 'Datacamp', 49981: 'WorldStream', 51396: 'Pfcloud',
     206092: 'IPXO', 30633: 'Leaseweb USA', 46562: 'Performive', 47583: 'Hostinger',
+    # Added 7 October 2026 from where the 14 published VPN server lists actually sit (bgp.tools prefix table),
+    # reviewed by name: data centres and VPS hosts only. Transit carriers and consumer ISPs were left out.
+    25369: 'Hydra Communications', 136557: 'Host Universal', 49453: 'Global Layer', 396356: 'Latitude.sh',
+    262287: 'Latitude.sh LTDA', 36352: 'HostPapa', 42201: 'PVDataNet', 42675: 'Obehosting', 34343: 'Eweka Internet Services',
+    205467: 'Base IP', 34305: 'Base IP', 43357: 'Owl Limited', 32489: 'Amanah Tech', 6206: 'Netrouting',
+    51852: 'Private Layer', 13737: 'Interconnecx', 51430: 'AltusHost', 52048: 'RixHost', 43350: 'NForce Entertainment',
+    63473: 'HostHatch', 197706: 'Keminet', 50304: 'Blix Solutions', 55720: 'Gigabit Hosting', 43289: 'Trabia',
+    53356: 'Free Range Cloud Hosting', 42831: 'UK Dedicated Servers', 397423: 'Tier.Net', 46664: 'VolumeDrive',
+    400587: 'Ryamer', 41564: 'Orion Network', 394256: 'Tech Futures Interactive', 133480: '5G Network Operations',
 }
 
 # Networks that VPN operators run themselves: everything announced there is VPN infrastructure, whatever the
@@ -155,6 +218,9 @@ VPN_OPERATOR_ASNS = {
     209854: 'Cyberzone S.A. (Surfshark)',
     39351: '31173 Services AB (Mullvad)',
     136787: 'PacketHub S.A. (Nord Security)',
+    147049: 'PacketHub S.A. (Nord Security)', 207137: 'PacketHub S.A. (Nord Security)', 141039: 'PacketHub S.A. (Nord Security)',
+    62651: 'Strong Technology (StrongVPN, IPVanish)', 140952: 'Strong Technology (StrongVPN, IPVanish)',
+    22781: 'Strong Technology (StrongVPN, IPVanish)',
 }
 
 
@@ -198,4 +264,21 @@ SOURCES = [
     Source('pia', VPN, 'https://serverlist.piaservers.net/vpninfo/servers/v6', parse_pia, 'Public server list used by its apps, no licence text.', True),
     Source('surfshark', VPN, 'https://api.surfshark.com/v4/server/clusters/generic', parse_surfshark,
            'Public cluster list (host names, resolved by DNS), no licence text.', True),
+    # Added 7 October 2026 under the same decision and safeguards (addresses only, attribution, takedown).
+    Source('airvpn', VPN, 'https://airvpn.org/api/status/', parse_airvpn, 'Public status API, no licence text.', True),
+    Source('windscribe', VPN, 'https://assets.windscribe.com/serverlist/mob-v2/1/0', parse_windscribe,
+           'Public server list used by its apps, no licence text.', True),
+    Source('ipvanish', VPN, 'https://configs.ipvanish.com/configs/configs.zip', openvpn_zip('ipvanish'),
+           'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True),
+    Source('privadovpn', VPN, 'https://privadovpn.com/apps/ovpn_configs.zip', openvpn_zip('privadovpn'),
+           'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True),
+    Source('ovpn', VPN, 'https://www.ovpn.com/v2/api/client/entry', parse_ovpn, 'Public server API used by its apps, no licence text.', True),
+    Source('azirevpn', VPN, 'https://api.azirevpn.com/v2/locations', parse_azirevpn,
+           'Public locations API (pool host names, resolved by DNS), no licence text.', True),
+    Source('privatevpn', VPN, 'https://privatevpn.com/serverlist/', page_hosts('privatevpn', r'[a-z0-9-]+\.pvdata\.host'),
+           'Public server page (host names, resolved by DNS), no licence text.', True),
+    Source('vpnac', VPN, 'https://vpn.ac/status', page_hosts('vpnac', r'\b[a-z]{2}[0-9]{1,2}\.vpn\.ac\b'),
+           'Public status page (host names, resolved by DNS), no licence text.', True),
+    Source('fastestvpn', VPN, 'https://support.fastestvpn.com/vpn-servers/', page_hosts('fastestvpn', r'[a-z0-9-]+\.jumptoserver\.com'),
+           'Public server page (host names, resolved by DNS), no licence text.', True),
 ]

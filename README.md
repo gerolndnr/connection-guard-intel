@@ -4,10 +4,10 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 
 | List | Meaning in Connection Guard |
 | --- | --- |
-| `vpn.txt` | Commercial VPN servers and exits: positive |
+| `vpn.txt` | Commercial VPN servers and exits from 14 operators, the ranges around them, and VPN-dominated data-centre networks: positive |
 | `tor.txt` | Tor exits: positive |
 | `relay.txt` | iCloud Private Relay: its own setting, allowed by default |
-| `hosting.txt` | Data centres and clouds: review only, never a VPN verdict on its own |
+| `hosting.txt` | Data centres and clouds: review only, never a VPN verdict on its own. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
 
 An address that is on no list is **unknown**, not clean. Connection Guard then asks its next detection service.
 
@@ -30,22 +30,36 @@ The pipeline:
 5. Refuses to publish if a list shrinks by more than 20 %.
 6. Signs `manifest.json` with ECDSA P-256 (`INTEL_SIGNING_KEY`).
 
-## Evaluation (6 October 2026)
+## Evaluation (7 October 2026)
 
 Scored on the [mc-antivpn-bench](https://github.com/gerolndnr/mc-antivpn-bench) dataset `detection-v1`, 692 labelled addresses, locally with `python -m intel.evaluate`:
 
-| Cohort | n | With operator lists | Without | Held out (not in the build) |
-| --- | --- | --- | --- | --- |
-| Commercial VPN | 125 | 97 % | 10 % | PIA 0 %, Surfshark 52 % |
-| Fresh VPN | 37 | 95 % | 8 % | |
-| VPN IPv6 | 40 | 100 % | 2 % | |
-| Tor | 80 | 95 % | 95 % | |
-| Residential, mobile, residential IPv6 (false positives) | 310 | 0 % | 0 % | |
+| Cohort | n | 6 Oct (5 lists) | 7 Oct (14 lists, inference) |
+| --- | --- | --- | --- |
+| Commercial VPN | 125 | 111 | **125** (100 %) |
+| Fresh VPN | 37 | 35 | **37** (100 %) |
+| VPN IPv6 | 40 | 40 | 40 (100 %) |
+| Tor | 80 | 66 | **70** (88 %) |
+| Residential, mobile, residential IPv6 (false positives) | 310 | 0 | **0** |
 
-**Read this with care.** The benchmark's VPN ground truth comes from the same operator lists, so the first column shows coverage, not generalisation. The honest numbers are:
+**Read this with care.** The benchmark's VPN ground truth comes from five of the same operator lists, so these rows show coverage, not generalisation. Two numbers show generalisation.
 
-- the held-out column,
-- the false positives,
-- and a time split, re-scored a week after a build.
+**Operators held out of the build:**
+
+| Held out | 6 Oct | 7 Oct |
+| --- | --- | --- |
+| PIA | 0 % | 56 % |
+| Surfshark | 24 % | 44 % |
+
+**Leave one operator out.** For each of the 14 operators, build without it and count how many of its published servers the rest still finds. The average across operators:
+
+| Lists and rules | Average found |
+| --- | --- |
+| Exact lists and operator networks only | 10 % |
+| /24 rule of 6 October (two servers of one operator) | 23 % |
+| /24 and /22 rules | 30 % |
+| **+ VPN-dominated hosting networks (≥ 4 operators, published)** | **57 %** |
+
+A time split, re-scored a week after a build, follows.
 
 The comparison with other detection services runs in mc-antivpn-bench under the same conditions as for every product.

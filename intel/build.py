@@ -43,33 +43,73 @@ def collect(sources, attempts=3):
     return entries, report
 
 
-def infer_vpn_prefixes(entries, min_hits=2):
-    """IPv4 /24s that a VPN operator demonstrably uses inside a data centre.
+# Inference (evaluated 7 October 2026 by leaving each of the 14 operators out in turn; see README):
+# a hosting /24 with a published VPN server, and a hosting /22 holding at least two such /24s.
+MIN_HITS_24 = 1
+MIN_24S_PER_22 = 2
+# Whole hosting networks (ASNs) in which at least this many different VPN operators publish servers. None = off.
+# These networks rent mostly to VPN services; their other customers are data-centre addresses too.
+DENSE_ASN_MIN_OPERATORS = 4  # owner decision, 7 October 2026
+# Reviewed exceptions: networks that may also serve business or consumer customers stay at the /24 rule.
+DENSE_ASN_EXCLUDE = {133480}
+
+
+class _Index:
+    """Longest-prefix membership for IPv4 networks."""
+    def __init__(self, networks):
+        self.by_len = {}
+        for n in networks:
+            self.by_len.setdefault(n.prefixlen, set()).add(int(n.network_address))
+
+    def __contains__(self, network):
+        value, upto = int(network.network_address), network.prefixlen
+        return any((value >> (32 - length) << (32 - length)) in starts for length, starts in self.by_len.items() if length <= upto)
+
+
+def infer_vpn_prefixes(entries, min_hits=MIN_HITS_24, min_24s=MIN_24S_PER_22):
+    """IPv4 /24s and /22s that VPN operators demonstrably use inside a data centre.
 
     Operators publish only some of their exits (Surfshark resolves a few addresses per cluster by DNS, PIA rotates
-    inside its ranges). A /24 becomes VPN when at least `min_hits` distinct published addresses of the same operator
-    lie in it AND the /24 is inside a published hosting range, so a consumer network is never inferred."""
-    hosting = [e.network for e in entries if e.category == HOSTING and e.network.version == 4]
-    hosting_index = {}
-    for n in hosting:
-        hosting_index.setdefault(n.prefixlen, set()).add(int(n.network_address))
-
-    def in_hosting(prefix24):
-        value = int(prefix24.network_address)
-        return any((value >> (32 - length) << (32 - length)) in starts for length, starts in hosting_index.items() if length <= 24)
-
+    inside its ranges) and rent neighbouring ranges. A /24 becomes VPN when at least `min_hits` published VPN server
+    addresses lie in it, a /22 when at least `min_24s` such /24s lie in it, and only ever inside a published hosting
+    range, so a consumer network is never inferred."""
+    hosting = _Index(e.network for e in entries if e.category == HOSTING and e.network.version == 4)
     hits = {}
     for e in entries:
         if e.category == VPN and e.method == 'exact' and e.network.version == 4:
-            p24 = e.network.supernet(new_prefix=24)
-            hits.setdefault((e.source, p24), set()).add(e.network)
-    return [Entry(p24, VPN, source, 'prefix-inferred') for (source, p24), addrs in sorted(hits.items(), key=lambda x: str(x[0]))
-            if len(addrs) >= min_hits and in_hosting(p24)]
+            hits.setdefault(e.network.supernet(new_prefix=24), {}).setdefault(e.network, e.source)
+    out = []
+    per22 = {}
+    for p24, addrs in sorted(hits.items()):
+        if len(addrs) >= min_hits and p24 in hosting:
+            source = sorted(set(addrs.values()))[0] if len(set(addrs.values())) == 1 else 'several-operators'
+            out.append(Entry(p24, VPN, source, 'prefix-inferred'))
+            per22.setdefault(p24.supernet(new_prefix=22), []).append(p24)
+    out += [Entry(p22, VPN, 'several-ranges', 'block-inferred') for p22, p24s in sorted(per22.items())
+            if min_24s and len(p24s) >= min_24s and p22 in hosting]
+    return out
 
 
-def lists(entries):
+def dense_hosting(entries, min_operators=DENSE_ASN_MIN_OPERATORS, exclude=DENSE_ASN_EXCLUDE):
+    """Every prefix of a hosting ASN in which at least `min_operators` different VPN operators publish servers."""
+    if not min_operators:
+        return [], {}
+    by_asn = {}
+    for e in entries:
+        if e.category == HOSTING and e.source.startswith('asn-') and e.network.version == 4:
+            by_asn.setdefault(int(e.source[4:]), []).append(e.network)
+    servers = [e for e in entries if e.category == VPN and e.method == 'exact' and e.network.version == 4]
+    operators = {}
+    for asn, prefixes in by_asn.items():
+        index = _Index(prefixes)
+        operators[asn] = sorted({e.source for e in servers if e.network in index})
+    dense = {asn: ops for asn, ops in operators.items() if len(ops) >= min_operators and asn not in exclude}
+    return [Entry(n, VPN, f'dense-asn-{asn}', 'vpn-dense-asn') for asn in dense for n in by_asn[asn]], dense
+
+
+def lists(entries, dense_min=DENSE_ASN_MIN_OPERATORS):
     """Collapsed networks per category, IPv4 before IPv6, sorted."""
-    entries = list(entries) + infer_vpn_prefixes(entries)
+    entries = list(entries) + infer_vpn_prefixes(entries) + dense_hosting(entries, dense_min)[0]
     out = {}
     for category in CATEGORIES:
         nets = [e.network for e in entries if e.category == category]
@@ -135,7 +175,7 @@ def with_history(entries, path, now):
     return list(entries) + old, len(old)
 
 
-def build(out, include_all=False, force=False, sources=None, key_pem=None, now=None, state=None):
+def build(out, include_all=False, force=False, sources=None, key_pem=None, now=None, state=None, dense_min=DENSE_ASN_MIN_OPERATORS):
     sources = [s for s in (sources or SOURCES) if include_all or s.redistribute]
     now = now or datetime.datetime.now(datetime.timezone.utc)
     as_of = now.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -143,7 +183,8 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     os.makedirs(out, exist_ok=True)
     os.makedirs(state or 'state', exist_ok=True)
     entries, kept = with_history(entries, os.path.join(state or 'state', 'vpn-history.json'), now)
-    result = lists(entries)
+    result = lists(entries, dense_min)
+    _, dense = dense_hosting(entries, dense_min)
     previous = None
     if os.path.exists(os.path.join(out, 'manifest.json')):
         with open(os.path.join(out, 'manifest.json')) as f:
@@ -151,7 +192,9 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     counts = {c: len(n) for c, n in result.items()}
     warnings = check_shrink(previous, counts, force)
     manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=report, warnings=warnings, lists={},
-                    vpn_addresses_from_history=kept, history_days=HISTORY_DAYS)
+                    vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
+                    inference=dict(min_hits_24=MIN_HITS_24, min_24s_per_22=MIN_24S_PER_22, dense_asn_min_operators=dense_min,
+                                   dense_asns={str(k): v for k, v in sorted(dense.items())}))
     for category, networks in result.items():
         body = render(category, networks, report, as_of)
         if len(body) > LIST_LIMIT:
@@ -177,8 +220,10 @@ def main(argv=None):
     p.add_argument('--all', action='store_true', help='include sources not cleared for redistribution (evaluation only)')
     p.add_argument('--state', help='directory for vpn-history.json, kept between builds and never published (default: state)')
     p.add_argument('--force', action='store_true', help='publish even if a list shrank by more than 20 %%')
+    p.add_argument('--dense-asn', type=int, default=DENSE_ASN_MIN_OPERATORS,
+                   help='mark whole hosting ASNs with at least this many VPN operators as VPN (default: %(default)s)')
     a = p.parse_args(argv)
-    m = build(a.out, include_all=a.all, force=a.force, state=a.state)
+    m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn)
     for r in m['sources']:
         print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r['error'] else ''))
     for c, l in m['lists'].items():

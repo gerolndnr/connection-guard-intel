@@ -1,11 +1,13 @@
 """Offline tests: parsers on recorded formats (documentation addresses), classification rules, build guards, signing."""
 import base64
 import datetime
+import io
 import ipaddress
 import json
 import os
 import tempfile
 import unittest
+import zipfile
 
 from intel import build, sources
 from intel.model import HOSTING, RELAY, TOR, VPN, Entry, net
@@ -53,6 +55,24 @@ class Parsers(unittest.TestCase):
         operator = json.dumps({'data': {'prefixes': [{'prefix': '146.70.0.0/16'}]}}).encode()
         self.assertEqual([(e.category, e.method) for e in sources.parse_operator_asn('operator-asn-1')(operator)], [(VPN, 'operator-asn')])
 
+    def test_new_operator_lists(self):
+        air = json.dumps({'servers': [{'ip_v4_in1': '185.65.134.66', 'ip_v4_in2': '185.65.134.67', 'ip_v6_in1': '2a03:1b20:4:f011::a01f', 'ip_v4_in3': ''}]}).encode()
+        self.assertEqual(nets(sources.parse_airvpn(air)), ['185.65.134.66/32', '185.65.134.67/32', '2a03:1b20:4:f011::/64'])
+        ws = json.dumps({'data': [{'groups': [{'nodes': [{'ip': '89.35.28.131', 'ip2': '89.35.28.132', 'ip3': '89.35.28.133'}]}]}, {'groups': None}]}).encode()
+        self.assertEqual(len(sources.parse_windscribe(ws)), 3)
+        ov = json.dumps({'datacenters': [{'servers': [{'ip': '37.120.212.227'}]}]}).encode()
+        self.assertEqual(nets(sources.parse_ovpn(ov)), ['37.120.212.227/32'])
+        az = json.dumps({'locations': [{'pool': 'ar-bue.azirevpn.net'}]}).encode()
+        self.assertEqual(nets(sources.parse_azirevpn(az, resolve=lambda hosts: ['45.9.249.10'] if hosts == ['ar-bue.azirevpn.net'] else [])), ['45.9.249.10/32'])
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as z:
+            z.writestr('a.ovpn', 'client\nremote acc-c01.ipvanish.com 443\n')
+            z.writestr('b.ovpn', 'remote 185.65.134.70 1194\n')
+        parsed = sources.openvpn_zip('ipvanish', resolve=lambda hosts: ['89.35.28.140'] if hosts == ['acc-c01.ipvanish.com'] else [])(buf.getvalue())
+        self.assertEqual(nets(parsed), ['185.65.134.70/32', '89.35.28.140/32'])
+        page = b'<td>ae-dub.pvdata.host</td><td>evil.example.com</td>'
+        self.assertEqual(nets(sources.page_hosts('privatevpn', r'[a-z0-9-]+\.pvdata\.host', resolve=lambda hosts: ['91.90.120.5'] if hosts == ['ae-dub.pvdata.host'] else [])(page)), ['91.90.120.5/32'])
+
     def test_private_and_special_addresses_are_never_listed(self):
         for text in ('10.1.2.3', '192.168.0.1', '127.0.0.1', '::1', 'fe80::1', '224.0.0.1', 'not-an-ip'):
             self.assertIsNone(net(text), text)
@@ -62,14 +82,30 @@ class Rules(unittest.TestCase):
     def e(self, text, category=VPN, source='op', method='exact'):
         return Entry(ipaddress.ip_network(text), category, source, method)
 
-    def test_a_24_is_inferred_only_with_two_operator_addresses_inside_hosting(self):
+    def test_a_24_is_inferred_from_a_published_server_only_inside_hosting(self):
         hosting = self.e('31.171.152.0/22', HOSTING, 'asn-x', 'prefix')
-        two = [self.e('31.171.154.10/32'), self.e('31.171.154.20/32')]
-        self.assertEqual([str(x.network) for x in build.infer_vpn_prefixes(two + [hosting])], ['31.171.154.0/24'])
-        self.assertEqual(build.infer_vpn_prefixes(two[:1] + [hosting]), [])  # one address is not a pattern
-        self.assertEqual(build.infer_vpn_prefixes(two), [])                  # never outside a hosting range
-        other = [self.e('31.171.154.10/32', source='a'), self.e('31.171.154.20/32', source='b')]
-        self.assertEqual(build.infer_vpn_prefixes(other + [hosting]), [])    # two operators, one address each
+        one = [self.e('31.171.154.10/32')]
+        self.assertEqual([str(x.network) for x in build.infer_vpn_prefixes(one + [hosting])], ['31.171.154.0/24'])
+        self.assertEqual(build.infer_vpn_prefixes(one), [])                       # never outside a hosting range
+        two_ops = [self.e('31.171.154.10/32', source='a'), self.e('31.171.154.20/32', source='b')]
+        self.assertEqual([x.source for x in build.infer_vpn_prefixes(two_ops + [hosting])], ['several-operators'])
+
+    def test_a_22_needs_two_vpn_24s_inside_hosting(self):
+        hosting = self.e('31.171.152.0/22', HOSTING, 'asn-x', 'prefix')
+        two = [self.e('31.171.153.10/32'), self.e('31.171.154.10/32')]
+        got = sorted(str(x.network) for x in build.infer_vpn_prefixes(two + [hosting]))
+        self.assertEqual(got, ['31.171.152.0/22', '31.171.153.0/24', '31.171.154.0/24'])
+        self.assertNotIn('31.171.152.0/22', [str(x.network) for x in build.infer_vpn_prefixes(two[:1] + [hosting])])
+
+    def test_dense_hosting_marks_a_whole_asn_only_with_enough_operators_and_never_an_excluded_one(self):
+        net_a, net_b = self.e('5.0.0.0/16', HOSTING, 'asn-100', 'prefix'), self.e('6.0.0.0/16', HOSTING, 'asn-100', 'prefix')
+        servers = [self.e('5.0.1.1/32', source='a'), self.e('5.0.2.1/32', source='b'), self.e('6.0.3.1/32', source='c')]
+        got, dense = build.dense_hosting(servers + [net_a, net_b], min_operators=3, exclude=set())
+        self.assertEqual(dense, {100: ['a', 'b', 'c']})
+        self.assertEqual(sorted(str(x.network) for x in got), ['5.0.0.0/16', '6.0.0.0/16'])
+        self.assertEqual(build.dense_hosting(servers + [net_a, net_b], min_operators=4, exclude=set())[0], [])
+        self.assertEqual(build.dense_hosting(servers + [net_a, net_b], min_operators=3, exclude={100})[0], [])
+        self.assertEqual(build.dense_hosting(servers + [net_a, net_b], min_operators=None)[0], [])
 
     def test_lists_collapse_per_category(self):
         result = build.lists([self.e('185.220.101.0/32', TOR, 'tor'), self.e('185.220.101.1/32', TOR, 'tor')])
