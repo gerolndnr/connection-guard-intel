@@ -1,0 +1,26 @@
+name: build
+on:
+  schedule: [{ cron: '17 3 * * *' }]
+  workflow_dispatch:
+  push: { branches: [main] }
+permissions: { contents: read }
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install cryptography==45.0.7
+      - run: python -m unittest discover -s tests -v
+      # The 14-day VPN history is kept between runs; it is never published.
+      - uses: actions/cache@v4
+        with: { path: state, key: "intel-state-${{ github.run_id }}", restore-keys: intel-state- }
+      - name: Build
+        if: github.event_name != 'push'
+        env: { INTEL_SIGNING_KEY: "${{ secrets.INTEL_SIGNING_KEY }}" }
+        run: python -m intel.build --out dist --state state
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
+        with: { name: lists, path: dist }
+      # Publication to intel.connectionguard.net is added once the owner has decided on the operator lists.

@@ -1,0 +1,6 @@
+dist/
+eval/
+__pycache__/
+*.pyc
+.venv/
+state/
