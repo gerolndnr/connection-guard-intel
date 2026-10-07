@@ -13,7 +13,7 @@ import ipaddress
 import json
 import os
 
-from .model import CATEGORIES, HOSTING, RELAY, TOR, VPN
+from .model import CATEGORIES, HOSTING, PROXY, RELAY, TOR, VPN
 
 POSITIVE_COHORTS = ('commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy')
 NEGATIVE_COHORTS = ('residential', 'mobile_cgnat', 'residential_v6')
@@ -49,10 +49,10 @@ def score(indexes, items, holdout=()):
     for item in items:
         key = item['cohort'] + (f" [held out: {item.get('provider')}]" if item.get('provider') in holdout else '')
         rows[key]['n'] += 1
-        verdict = next((c for c in (TOR, VPN, RELAY) if item['ip'] in indexes[c]), None)
+        verdict = next((c for c in (TOR, VPN, PROXY, RELAY) if c in indexes and item['ip'] in indexes[c]), None)
         if verdict:
             rows[key][verdict] += 1
-            rows[key]['blocked' if verdict in (TOR, VPN) else 'relay'] += 1
+            rows[key]['blocked' if verdict in (TOR, VPN, PROXY) else 'relay'] += 1
         if item['ip'] in indexes[HOSTING]:
             rows[key]['hosting'] += 1
     return rows
@@ -68,6 +68,8 @@ def main(argv=None):
     holdout = tuple(h for h in a.holdout.split(',') if h)
     items = [json.loads(l) for l in open(a.dataset)]
     indexes = {c: Index(load(os.path.join(a.lists, f'{c.lower()}.txt'))) for c in CATEGORIES}
+    if os.path.exists(os.path.join(a.lists, 'proxy.txt')):  # read by Connection Guard 0.6.1 and later
+        indexes[PROXY] = Index(load(os.path.join(a.lists, 'proxy.txt')))
     if holdout:
         # Re-parse the sources without the held-out operators. Hosting ranges and operator networks stay in, because
         # the inference rules need them; an operator ASN of a held-out operator is left out as well.
