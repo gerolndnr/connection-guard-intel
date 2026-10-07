@@ -15,7 +15,7 @@ import os
 import sys
 import time
 
-from .model import ADDITIONAL, CATEGORIES, HOSTING, PROXY, RELAY, VPN, Entry, fetch
+from .model import ADDITIONAL, CATEGORIES, HOSTING, PROXY, RELAY, TOR, VPN, Entry, fetch
 from .sources import SOURCES
 
 LIST_LIMIT = 4 * 1024 * 1024  # the plugin's bound for one decompressed list
@@ -154,12 +154,15 @@ def sign(data, key_pem):
 
 
 HISTORY_DAYS = 14
+# Tor exits come and go as relays restart or change their exit policy; the bulk list names only the exits running at
+# the moment of the fetch. An exit stays 3 days after it was last listed (owner decision, 7 October 2026).
+TOR_HISTORY_DAYS = 3
 
 
-def with_history(entries, path, now):
-    """Keeps published VPN addresses for 14 days after they were last seen.
+def with_history(entries, path, now, category=VPN, days=HISTORY_DAYS):
+    """Keeps published addresses of `category` for `days` after they were last seen.
 
-    Operators rotate addresses and DNS answers vary (Surfshark resolves a few addresses per cluster), so one fetch
+    VPN: operators rotate addresses and DNS answers vary (Surfshark resolves a few addresses per cluster), so one fetch
     sees only part of a fleet. An address leaves the list 14 days after its operator stopped publishing it."""
     history = {}
     if os.path.exists(path):
@@ -167,11 +170,11 @@ def with_history(entries, path, now):
             history = json.load(f)
     stamp = now.timestamp()
     for e in entries:
-        if e.category == VPN and e.method in ('exact', 'v6-subnet'):
+        if e.category == category and e.method in ('exact', 'v6-subnet'):
             history[str(e.network)] = dict(source=e.source, method=e.method, last_seen=stamp)
-    history = {k: v for k, v in history.items() if stamp - v['last_seen'] <= HISTORY_DAYS * 86400}
-    current = {str(e.network) for e in entries}
-    old = [Entry(ipaddress.ip_network(k), VPN, v['source'], v['method']) for k, v in history.items() if k not in current]
+    history = {k: v for k, v in history.items() if stamp - v['last_seen'] <= days * 86400}
+    current = {str(e.network) for e in entries}  # listed now in any category: the current listing wins
+    old = [Entry(ipaddress.ip_network(k), category, v['source'], v['method']) for k, v in history.items() if k not in current]
     with open(path, 'w') as f:
         json.dump(history, f, sort_keys=True)
     return list(entries) + old, len(old)
@@ -224,6 +227,7 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     os.makedirs(out, exist_ok=True)
     os.makedirs(state or 'state', exist_ok=True)
     entries, kept = with_history(entries, os.path.join(state or 'state', 'vpn-history.json'), now)
+    entries, tor_kept = with_history(entries, os.path.join(state or 'state', 'tor-history.json'), now, TOR, TOR_HISTORY_DAYS)
     result = lists(entries, dense_min)
     _, dense = dense_hosting(entries, dense_min)
     previous = None
@@ -238,6 +242,7 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
                     additional_lists={},
                     proxy=dict(min_lists=PROXY_MIN_LISTS, history_days=PROXY_HISTORY_DAYS, addresses_from_history=proxies_from_history),
                     vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
+                    tor_addresses_from_history=tor_kept, tor_history_days=TOR_HISTORY_DAYS,
                     inference=dict(min_hits_24=MIN_HITS_24, min_24s_per_22=MIN_24S_PER_22, dense_asn_min_operators=dense_min,
                                    dense_asns={str(k): v for k, v in sorted(dense.items())}))
     for category, networks in list(result.items()) + ([(PROXY, proxies)] if proxies else []):

@@ -212,5 +212,23 @@ class Proxies(unittest.TestCase):
             self.assertNotIn('PROXY', m['additional_lists'])
 
 
+class TorHistory(unittest.TestCase):
+    def test_tor_exit_stays_three_days(self):
+        import datetime
+        t0 = datetime.datetime(2026, 10, 7, tzinfo=datetime.timezone.utc)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'tor-history.json')
+            day0 = sources.parse_tor(b'185.220.101.1\n185.220.101.2\n')
+            build.with_history(day0, path, t0, TOR, build.TOR_HISTORY_DAYS)
+            day2, kept = build.with_history(sources.parse_tor(b'185.220.101.1\n'), path, t0 + datetime.timedelta(days=2), TOR, build.TOR_HISTORY_DAYS)
+            self.assertEqual((sorted(str(e.network) for e in day2), kept), (['185.220.101.1/32', '185.220.101.2/32'], 1))
+            day4, kept = build.with_history(sources.parse_tor(b'185.220.101.1\n'), path, t0 + datetime.timedelta(days=4), TOR, build.TOR_HISTORY_DAYS)
+            self.assertEqual((sorted(str(e.network) for e in day4), kept), (['185.220.101.1/32'], 0))
+            # VPN history is untouched by the Tor history.
+            vpn = [Entry(net('89.35.28.131'), VPN, 'mullvad', 'exact')]
+            out, _ = build.with_history(vpn + day4, os.path.join(d, 'vpn-history.json'), t0, VPN, build.HISTORY_DAYS)
+            self.assertEqual({e.category for e in out}, {VPN, TOR})
+
+
 if __name__ == '__main__':
     unittest.main()

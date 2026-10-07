@@ -5,7 +5,7 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 | List | Meaning in Connection Guard |
 | --- | --- |
 | `vpn.txt` | Commercial VPN servers and exits from 14 operators, the ranges around them, and VPN-dominated data-centre networks: positive |
-| `tor.txt` | Tor exits: positive |
+| `tor.txt` | Tor exits, kept 3 days after they were last listed: positive |
 | `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting, allowed by default |
 | `proxy.txt` | Open proxies named by public proxy lists of at least two different maintainers, kept 7 days: positive. Read by Connection Guard 0.6.1 and later; listed in `manifest.json` under `additional_lists`, which 0.6.0 ignores. Never inside a relay range. |
 | `hosting.txt` | Data centres and clouds: review only, never a VPN verdict on its own. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
