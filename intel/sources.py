@@ -123,8 +123,8 @@ def proxy_source(sid, group, url, terms, redistribute):
 
 
 GH = 'https://raw.githubusercontent.com/'
-# Public open-proxy lists, reviewed 7 October 2026. Published only from lists with a licence that allows it (MIT);
-# lists without a licence (and one under GPL-3.0) are fetched for evaluation only (`--all`) until the owner decides.
+# Public open-proxy lists, reviewed 7 October 2026. Every list is published, whatever its licence (owner decision,
+# 7 October 2026, as for the VPN operator lists); the terms column keeps each list's licence on record.
 # The benchmark's proxy cohort comes from monosans, proxifly and vakhov, so those three are deliberately not used.
 PROXY_SOURCES = [
     proxy_source('proxy-jetkai', 'jetkai', GH + 'jetkai/proxy-list/main/online-proxies/txt/proxies.txt', 'MIT licence (jetkai/proxy-list).', True),
@@ -134,18 +134,18 @@ PROXY_SOURCES = [
     proxy_source(f'proxy-ercin-{kind}', 'ercin', GH + f'ErcinDedeoglu/proxies/main/proxies/{kind}.txt', 'MIT licence (ErcinDedeoglu/proxies).', True)
     for kind in ('http', 'https', 'socks4', 'socks5')
 ] + [
-    proxy_source(f'proxy-speedx-{kind}', 'speedx', GH + f'TheSpeedX/PROXY-List/master/{kind}.txt', 'No licence published.', False)
+    proxy_source(f'proxy-speedx-{kind}', 'speedx', GH + f'TheSpeedX/PROXY-List/master/{kind}.txt', 'No licence published.', True)
     for kind in ('http', 'socks4', 'socks5')
 ] + [
-    proxy_source('proxy-shiftytr', 'shiftytr', GH + 'ShiftyTR/Proxy-List/master/proxy.txt', 'No licence published.', False),
-    proxy_source('proxy-hookzof', 'hookzof', GH + 'hookzof/socks5_list/master/proxy.txt', 'No licence published.', False),
-    proxy_source('proxy-roosterkid', 'roosterkid', GH + 'roosterkid/openproxylist/main/HTTPS_RAW.txt', 'No licence published.', False),
-    proxy_source('proxy-mmpx12', 'mmpx12', GH + 'mmpx12/proxy-list/master/proxies.txt', 'No licence published.', False),
-    proxy_source('proxy-zloi', 'zloi', GH + 'zloi-user/hideip.me/main/http.txt', 'No licence published.', False),
-    proxy_source('proxy-prxchk', 'prxchk', GH + 'prxchk/proxy-list/main/all.txt', 'No licence published.', False),
-    proxy_source('proxy-murongpig', 'murongpig', GH + 'MuRongPIG/Proxy-Master/main/http.txt', 'GPL-3.0 (copyleft; not combined with CC BY data).', False),
+    proxy_source('proxy-shiftytr', 'shiftytr', GH + 'ShiftyTR/Proxy-List/master/proxy.txt', 'No licence published.', True),
+    proxy_source('proxy-hookzof', 'hookzof', GH + 'hookzof/socks5_list/master/proxy.txt', 'No licence published.', True),
+    proxy_source('proxy-roosterkid', 'roosterkid', GH + 'roosterkid/openproxylist/main/HTTPS_RAW.txt', 'No licence published.', True),
+    proxy_source('proxy-mmpx12', 'mmpx12', GH + 'mmpx12/proxy-list/master/proxies.txt', 'No licence published.', True),
+    proxy_source('proxy-zloi', 'zloi', GH + 'zloi-user/hideip.me/main/http.txt', 'No licence published.', True),
+    proxy_source('proxy-prxchk', 'prxchk', GH + 'prxchk/proxy-list/main/all.txt', 'No licence published.', True),
+    proxy_source('proxy-murongpig', 'murongpig', GH + 'MuRongPIG/Proxy-Master/main/http.txt', 'GPL-3.0.', True),
     proxy_source('proxy-proxyscrape', 'proxyscrape', 'https://api.proxyscrape.com/v2/?request=getproxies&protocol=all&timeout=10000&country=all&ssl=all&anonymity=all',
-                 'Commercial service; free-API terms not reviewed.', False),
+                 'Commercial service; free-API terms not reviewed.', True),
 ]
 
 

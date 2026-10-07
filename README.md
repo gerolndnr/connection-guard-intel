@@ -79,6 +79,6 @@ The Tor row is built from exits seen on 4 October, three days before. With only 
 
 A time split, re-scored a week after a build, follows.
 
-**Proxies.** `proxy.txt` uses none of the three lists the benchmark's proxy cohort was built from (monosans, proxifly, vakhov), so the 19 is not circular. It is published only from MIT-licensed lists; seven more lists without a licence are fetched for evaluation only (SOURCES.md). Inside Connection Guard's chain the list matters most where Blackbox needs confirmation (0.6.1): replayed on the benchmark's answers, it brings the chain to 90 of 100 proxies with one home or mobile player refused.
+**Proxies.** `proxy.txt` uses none of the three lists the benchmark's proxy cohort was built from (monosans, proxifly, vakhov), so the 19 is not circular. Since 7 October 2026 it is built from all twelve maintainers' lists, whatever their licence (owner decision, SOURCES.md). Inside Connection Guard's chain the list matters most where Blackbox needs confirmation (0.6.1): replayed on the benchmark's answers, it brings the chain to 90 of 100 proxies with one home or mobile player refused.
 
 The comparison with other detection services runs in mc-antivpn-bench under the same conditions as for every product: the `providers` family measures Intel as a service of its own (`cg-intel`), marked as the author's project.

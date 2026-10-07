@@ -73,9 +73,11 @@ The rules were chosen by leaving each of the 14 operators out of the build in tu
 | clarketm/proxy-list | MIT | yes |
 | sunny9577/proxy-scraper | MIT | yes |
 | ErcinDedeoglu/proxies | MIT | yes |
-| TheSpeedX/PROXY-List, ShiftyTR/Proxy-List, hookzof/socks5_list, roosterkid/openproxylist, mmpx12/proxy-list, zloi-user/hideip.me, prxchk/proxy-list | no licence published | evaluation only, pending the owner's decision |
-| MuRongPIG/Proxy-Master | GPL-3.0 | no: copyleft, not combined with the CC BY lists |
-| proxyscrape free API | commercial service, terms not reviewed | evaluation only |
+| TheSpeedX/PROXY-List, ShiftyTR/Proxy-List, hookzof/socks5_list, roosterkid/openproxylist, mmpx12/proxy-list, zloi-user/hideip.me, prxchk/proxy-list | no licence published | yes (owner decision, 7 Oct 2026) |
+| MuRongPIG/Proxy-Master | GPL-3.0 | yes (owner decision, 7 Oct 2026) |
+| proxyscrape free API | commercial service, terms not reviewed | yes (owner decision, 7 Oct 2026) |
+
+With the MIT lists alone, 4,590 addresses met the two-maintainer rule on 7 October 2026, because most addresses come from one maintainer (ErcinDedeoglu). With all twelve maintainers, 31,905 did, and the benchmark's proxy cohort went from 17 to 68 of 100 listed, with no home or mobile address listed.
 
 monosans, proxifly and vakhov are not used: mc-antivpn-bench builds its proxy cohort from them, so using them would only measure coverage.
 
