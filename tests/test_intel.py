@@ -212,6 +212,21 @@ class Proxies(unittest.TestCase):
             self.assertNotIn('PROXY', m['additional_lists'])
 
 
+class TorCollector(unittest.TestCase):
+    def test_newest_exit_list_is_read(self):
+        index = (b'<a href="2026-10-04-09-10-13"></a><a href="2026-10-05-09-10-13"></a><a href="2026-10-06-10-10-13"></a>'
+                 b'<a href="2026-10-07-08-10-13"></a><a href="2026-10-07-09-10-13"></a>')
+        asked = []
+        def get(url):
+            asked.append(url)
+            return b'@type tordnsel 1.0\nExitNode AB\nExitAddress 171.25.193.25 2026-10-07 08:26:01\nExitAddress 10.0.0.1 2026-10-07 08:26:01\n'
+        got = sources.parse_collector_exits(get)(index)
+        # The newest, then the newest at least 24 h older (10-06 10:10 is only 23 h older) and 48 h older (the same file, once).
+        self.assertEqual(asked, [sources.COLLECTOR + '2026-10-07-09-10-13', sources.COLLECTOR + '2026-10-05-09-10-13'])
+        self.assertEqual([str(e.network) for e in got], ['171.25.193.25/32'])
+        self.assertEqual({e.category for e in got}, {TOR})
+
+
 class TorHistory(unittest.TestCase):
     def test_tor_exit_stays_three_days(self):
         import datetime

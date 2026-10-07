@@ -50,6 +50,34 @@ def parse_tor(body):
     return entries(_lines(body), TOR, 'tor-bulk-exit-list')
 
 
+COLLECTOR = 'https://collector.torproject.org/recent/exit-lists/'
+
+
+def parse_collector_exits(get=None, days=3):
+    """Exit addresses from CollecTor's exit lists (TorDNSEL) of the last `days` days, one snapshot per day: the newest
+    and the newest at least 24 h, 48 h ... older. The bulk list names only the exits running at the moment of the
+    fetch; exits come and go, so this keeps those seen in the last 3 days from the first build on."""
+    import datetime
+    def parse(index):
+        from .model import fetch
+        names = sorted(set(re.findall(r'href="(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})"', index.decode('utf-8', 'replace'))))
+        if not names:
+            return []
+        when = lambda n: datetime.datetime.strptime(n, '%Y-%m-%d-%H-%M-%S')
+        newest = when(names[-1])
+        picked = []
+        for day in range(days):
+            older = [n for n in names if newest - when(n) >= datetime.timedelta(days=day)]
+            if older and older[-1] not in picked:
+                picked.append(older[-1])
+        found = []
+        for name in picked:
+            body = (get or fetch)(COLLECTOR + name)
+            found += re.findall(r'^ExitAddress (\S+) ', body.decode('utf-8', 'replace'), re.M)
+        return entries(sorted(set(found)), TOR, 'tor-collector')
+    return parse
+
+
 def parse_icloud(body):
     # RFC 8805 geofeed: prefix,country,region,city,
     return entries([row[0] for row in csv.reader(io.StringIO(body.decode('utf-8', 'replace'))) if row and not row[0].startswith('#')],
@@ -309,6 +337,8 @@ def parse_operator_asn(source):
 SOURCES = [
     Source('tor-bulk-exit-list', TOR, 'https://check.torproject.org/torbulkexitlist', parse_tor,
            'Tor Project, published for exactly this use (blocking or allowing Tor exits).', True),
+    Source('tor-collector', TOR, COLLECTOR, parse_collector_exits(),
+           'Tor Project CollecTor exit lists, published for research and for identifying Tor exits.', True, optional=True),
     Source('icloud-private-relay', RELAY, 'https://mask-api.icloud.com/egress-ip-ranges.csv', parse_icloud,
            'Apple publishes the egress ranges so that services can recognise Private Relay; no licence text.', True),
     Source('cloudflare-warp', RELAY, 'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS13335', parse_cloudflare_egress,

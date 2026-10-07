@@ -5,6 +5,7 @@ Each source is fetched without a key. `redistribute` (in `intel/sources.py`) say
 | Source | Category | Terms as published | Redistribute |
 | --- | --- | --- | --- |
 | Tor bulk exit list (check.torproject.org) | TOR | Published by the Tor Project so that services can identify Tor exits | yes |
+| Tor Project CollecTor exit lists, one snapshot per day of the last 3 days (collector.torproject.org/recent/exit-lists) | TOR | Published by the Tor Project for research and for identifying Tor exits | yes (added 7 Oct 2026) |
 | Apple iCloud Private Relay egress ranges | RELAY | Published by Apple so that services can recognise Private Relay (RFC 8805 geofeed); no licence text | yes |
 | Cloudflare WARP and Gateway egress: RIPEstat announced prefixes of AS13335 inside 104.28.0.0/14 and 2a09:bac0::/29 | RELAY | RIPE NCC routing data, free with attribution. Cloudflare publishes no WARP list; it repurposed 104.28.0.0/14 for Gateway and WARP when it took the block out of its CDN ranges (2021). Cloudflare's CDN ranges (cloudflare.com/ips) are never included. Added 7 Oct 2026 | yes |
 | AWS ip-ranges.json, Google Cloud cloud.json, Oracle public_ip_ranges.json | HOSTING | Published by the providers for firewall and routing use | yes |
