@@ -6,6 +6,7 @@ Each source is fetched without a key. `redistribute` (in `intel/sources.py`) say
 | --- | --- | --- | --- |
 | Tor bulk exit list (check.torproject.org) | TOR | Published by the Tor Project so that services can identify Tor exits | yes |
 | Apple iCloud Private Relay egress ranges | RELAY | Published by Apple so that services can recognise Private Relay (RFC 8805 geofeed); no licence text | yes |
+| Cloudflare WARP and Gateway egress: RIPEstat announced prefixes of AS13335 inside 104.28.0.0/14 and 2a09:bac0::/29 | RELAY | RIPE NCC routing data, free with attribution. Cloudflare publishes no WARP list; it repurposed 104.28.0.0/14 for Gateway and WARP when it took the block out of its CDN ranges (2021). Cloudflare's CDN ranges (cloudflare.com/ips) are never included. Added 7 Oct 2026 | yes |
 | AWS ip-ranges.json, Google Cloud cloud.json, Oracle public_ip_ranges.json | HOSTING | Published by the providers for firewall and routing use | yes |
 | DigitalOcean, Linode/Akamai geofeeds | HOSTING | RFC 8805 self-published geofeeds, meant for public consumption | yes |
 | RIPEstat announced prefixes (RIS) for the hosting ASNs in `HOSTING_ASNS` | HOSTING | RIPE NCC, free with attribution | yes |
@@ -60,3 +61,20 @@ The rules were chosen by leaving each of the 14 operators out of the build in tu
 
     A one-off spot check on 7 October 2026 resolved 176 ProtonVPN entry servers from the host names in its configuration files (30 countries). Nothing was published from it. Before Proton's networks were added, 82 % of those servers were already on the list, through the hosting rules (M247, Datacamp); with them, 89 %.
 - The hosting ASNs added on 7 October 2026 come from where the 14 published server lists actually sit (bgp.tools prefix table), reviewed by name. Transit carriers (Cogent, GTT) and a consumer ISP (Afrihost) were left out.
+
+## Open proxies (added 7 October 2026)
+
+`proxy.txt` takes an address when public proxy lists of at least two different maintainers name it on the same day, and keeps it for 7 days. Addresses inside a RELAY range are never listed. Only the address is published, never the port.
+
+| List | Licence | Published |
+| --- | --- | --- |
+| jetkai/proxy-list | MIT | yes |
+| clarketm/proxy-list | MIT | yes |
+| sunny9577/proxy-scraper | MIT | yes |
+| ErcinDedeoglu/proxies | MIT | yes |
+| TheSpeedX/PROXY-List, ShiftyTR/Proxy-List, hookzof/socks5_list, roosterkid/openproxylist, mmpx12/proxy-list, zloi-user/hideip.me, prxchk/proxy-list | no licence published | evaluation only, pending the owner's decision |
+| MuRongPIG/Proxy-Master | GPL-3.0 | no: copyleft, not combined with the CC BY lists |
+| proxyscrape free API | commercial service, terms not reviewed | evaluation only |
+
+monosans, proxifly and vakhov are not used: mc-antivpn-bench builds its proxy cohort from them, so using them would only measure coverage.
+

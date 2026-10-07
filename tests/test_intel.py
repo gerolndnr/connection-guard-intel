@@ -18,6 +18,13 @@ def nets(entries):
 
 
 class Parsers(unittest.TestCase):
+    def test_cloudflare_warp_only_inside_its_egress_blocks(self):
+        body = json.dumps(dict(data=dict(prefixes=[dict(prefix='104.28.200.0/24'), dict(prefix='2a09:bac1::/32'),
+                                                   dict(prefix='104.16.0.0/13'), dict(prefix='185.193.28.0/22')]))).encode()
+        got = sources.parse_cloudflare_egress(body)
+        self.assertEqual(sorted(str(e.network) for e in got), ['104.28.200.0/24', '2a09:bac1::/32'])
+        self.assertEqual({e.category for e in got}, {RELAY})
+
     def test_tor_and_icloud(self):
         # Documentation and private ranges are not global and never listed; public exit addresses are.
         self.assertEqual(nets(sources.parse_tor(b'192.0.2.1\n# comment\n10.0.0.1\n')), [])
@@ -159,6 +166,50 @@ class Guards(unittest.TestCase):
                 self.assertFalse(os.path.exists(os.path.join(d, 'dist', 'vpn-history.json')))
         finally:
             build.fetch = orig
+
+
+class Proxies(unittest.TestCase):
+    def test_proxy_lines(self):
+        got = sources.parse_proxy_list('p')(b'1.2.3.4:8080\nsocks5://5.6.7.8:1080\nhttp://user@9.9.9.9:3128\n10.0.0.1:80\n# c\n8.8.4.4\n')
+        self.assertEqual(sorted(str(e.network) for e in got), ['1.2.3.4/32', '5.6.7.8/32', '8.8.4.4/32', '9.9.9.9/32'])
+
+    def build_with(self, d, lists, now=None):
+        src = [sources.Source('tor', TOR, 'mem://tor', lambda b: sources.parse_tor(b'185.220.101.1\n'), 't', True),
+               sources.Source('relay', RELAY, 'mem://relay', lambda b: sources.entries(['104.28.0.0/16'], RELAY, 'relay', 'prefix'), 't', True)]
+        for i, (group, body) in enumerate(lists):
+            src.append(sources.proxy_source(f'p{i}', group, f'mem://p{i}', 't', True))
+            src[-1].parse = (lambda sid, body: lambda b: sources.parse_proxy_list(sid)(body))(f'p{i}', body)
+        orig = build.fetch
+        build.fetch = lambda url, headers=None: b''
+        try:
+            return build.build(os.path.join(d, 'dist'), sources=src, state=os.path.join(d, 'state'), now=now)
+        finally:
+            build.fetch = orig
+
+    def test_two_maintainers_must_agree_and_relay_is_never_a_proxy(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = self.build_with(d, [('a', b'45.90.28.7:80\n104.28.200.15:80\n45.90.28.9:8080\n'),
+                                    ('a', b'45.90.29.44:80\n'),
+                                    ('b', b'45.90.28.7:3128\n104.28.200.15:3128\n')])
+            # 0.6.0 accepts exactly four `lists`; the proxy list is elsewhere.
+            self.assertEqual(set(m['lists']), {VPN, TOR, RELAY, HOSTING})
+            self.assertEqual(m['additional_lists']['PROXY']['networks'], 1)
+            body = open(os.path.join(d, 'dist', 'proxy.txt')).read()
+            self.assertIn('45.90.28.7', body)
+            self.assertNotIn('104.28.200.15', body)   # inside a relay range
+            self.assertNotIn('45.90.28.9', body)     # one maintainer only
+            self.assertLess(len(open(os.path.join(d, 'dist', 'manifest.json'), 'rb').read()), build.MANIFEST_LIMIT)
+
+    def test_history_keeps_a_proxy_seven_days(self):
+        import datetime
+        t0 = datetime.datetime(2026, 10, 7, tzinfo=datetime.timezone.utc)
+        with tempfile.TemporaryDirectory() as d:
+            self.build_with(d, [('a', b'45.90.28.7:80\n'), ('b', b'45.90.28.7:80\n')], now=t0)
+            m = self.build_with(d, [('a', b'45.90.29.1:80\n'), ('b', b'45.90.29.2:80\n')], now=t0 + datetime.timedelta(days=6))
+            self.assertEqual(m['additional_lists']['PROXY']['networks'], 1)
+            self.assertEqual(m['proxy']['addresses_from_history'], 1)
+            m = self.build_with(d, [('a', b'45.90.29.1:80\n'), ('b', b'45.90.29.2:80\n')], now=t0 + datetime.timedelta(days=8))
+            self.assertNotIn('PROXY', m['additional_lists'])
 
 
 if __name__ == '__main__':

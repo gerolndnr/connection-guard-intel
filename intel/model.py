@@ -12,6 +12,10 @@ TOR = 'TOR'          # Tor exit: positive
 RELAY = 'RELAY'      # privacy relay (iCloud Private Relay): its own operator choice, allowed by default
 HOSTING = 'HOSTING'  # data centre / cloud: review only, never a VPN verdict on its own
 CATEGORIES = (VPN, TOR, RELAY, HOSTING)
+# Published in manifest.json under `additional_lists`, never in `lists`: Connection Guard 0.6.0 accepts a manifest only
+# when `lists` holds exactly the four categories above, and ignores other top-level fields.
+PROXY = 'PROXY'      # open proxy listed by several public proxy lists: positive (Connection Guard 0.6.1 and later)
+ADDITIONAL = (PROXY,)
 
 USER_AGENT = 'connection-guard-intel/0.1 (+https://github.com/gerolndnr/connection-guard-intel)'
 

@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .model import HOSTING, RELAY, TOR, VPN, Entry, net
+from .model import HOSTING, PROXY, RELAY, TOR, VPN, Entry, net
 
 
 @dataclass
@@ -28,6 +28,8 @@ class Source:
     # Optional sources may fail without stopping the build (reported in the manifest; the 14-day history keeps their
     # last addresses). Used for operators that block data-centre clients such as CI runners.
     optional: bool = False
+    # Proxy lists: the maintainer. An address counts only when lists of at least two different maintainers name it.
+    group: str = ''
 
 
 def _lines(body):
@@ -52,6 +54,71 @@ def parse_icloud(body):
     # RFC 8805 geofeed: prefix,country,region,city,
     return entries([row[0] for row in csv.reader(io.StringIO(body.decode('utf-8', 'replace'))) if row and not row[0].startswith('#')],
                    RELAY, 'icloud-private-relay', 'prefix')
+
+
+# Cloudflare's client egress blocks: WARP, Zero Trust Gateway and Cloudflare's share of iCloud Private Relay. Cloudflare
+# publishes no WARP list; when it removed 104.28.0.0/14 from its CDN ranges (cloudflare.com/ips, 2021) it said the block
+# was repurposed for Gateway and WARP, and 2a09:bac0::/29 is its IPv6 counterpart. Only what AS13335 actually announces
+# inside these blocks is listed, and nothing from the CDN ranges, so a website behind Cloudflare never becomes a relay.
+CLOUDFLARE_EGRESS_BLOCKS = ('104.28.0.0/14', '2a09:bac0::/29')
+
+
+def parse_cloudflare_egress(body):
+    import ipaddress
+    blocks = [ipaddress.ip_network(b) for b in CLOUDFLARE_EGRESS_BLOCKS]
+    prefixes = []
+    for p in json.loads(body)['data']['prefixes']:
+        n = ipaddress.ip_network(p['prefix'], strict=False)
+        if any(n.version == b.version and n.subnet_of(b) for b in blocks):
+            prefixes.append(p['prefix'])
+    return entries(prefixes, RELAY, 'cloudflare-warp', 'prefix')
+
+
+# ------------------------------------------------------------------- open proxies
+_PROXY_LINE = re.compile(r'(?:^|[/@\s])((?:\d{1,3}\.){3}\d{1,3})(?=[:\s]|$)')
+
+
+def parse_proxy_list(source):
+    """`ip:port`, `scheme://ip:port` or `ip` per line. The port is dropped: a listed address is a proxy exit."""
+    def parse(body):
+        found = []
+        for line in body.decode('utf-8', 'replace').splitlines():
+            m = _PROXY_LINE.search(line.strip())
+            if m:
+                found.append(m.group(1))
+        return entries(found, PROXY, source)
+    return parse
+
+
+def proxy_source(sid, group, url, terms, redistribute):
+    return Source(sid, PROXY, url, parse_proxy_list(sid), terms, redistribute, optional=True, group=group)
+
+
+GH = 'https://raw.githubusercontent.com/'
+# Public open-proxy lists, reviewed 7 October 2026. Published only from lists with a licence that allows it (MIT);
+# lists without a licence (and one under GPL-3.0) are fetched for evaluation only (`--all`) until the owner decides.
+# The benchmark's proxy cohort comes from monosans, proxifly and vakhov, so those three are deliberately not used.
+PROXY_SOURCES = [
+    proxy_source('proxy-jetkai', 'jetkai', GH + 'jetkai/proxy-list/main/online-proxies/txt/proxies.txt', 'MIT licence (jetkai/proxy-list).', True),
+    proxy_source('proxy-clarketm', 'clarketm', GH + 'clarketm/proxy-list/master/proxy-list-raw.txt', 'MIT licence (clarketm/proxy-list).', True),
+    proxy_source('proxy-sunny9577', 'sunny9577', GH + 'sunny9577/proxy-scraper/master/proxies.txt', 'MIT licence (sunny9577/proxy-scraper).', True),
+] + [
+    proxy_source(f'proxy-ercin-{kind}', 'ercin', GH + f'ErcinDedeoglu/proxies/main/proxies/{kind}.txt', 'MIT licence (ErcinDedeoglu/proxies).', True)
+    for kind in ('http', 'https', 'socks4', 'socks5')
+] + [
+    proxy_source(f'proxy-speedx-{kind}', 'speedx', GH + f'TheSpeedX/PROXY-List/master/{kind}.txt', 'No licence published.', False)
+    for kind in ('http', 'socks4', 'socks5')
+] + [
+    proxy_source('proxy-shiftytr', 'shiftytr', GH + 'ShiftyTR/Proxy-List/master/proxy.txt', 'No licence published.', False),
+    proxy_source('proxy-hookzof', 'hookzof', GH + 'hookzof/socks5_list/master/proxy.txt', 'No licence published.', False),
+    proxy_source('proxy-roosterkid', 'roosterkid', GH + 'roosterkid/openproxylist/main/HTTPS_RAW.txt', 'No licence published.', False),
+    proxy_source('proxy-mmpx12', 'mmpx12', GH + 'mmpx12/proxy-list/master/proxies.txt', 'No licence published.', False),
+    proxy_source('proxy-zloi', 'zloi', GH + 'zloi-user/hideip.me/main/http.txt', 'No licence published.', False),
+    proxy_source('proxy-prxchk', 'prxchk', GH + 'prxchk/proxy-list/main/all.txt', 'No licence published.', False),
+    proxy_source('proxy-murongpig', 'murongpig', GH + 'MuRongPIG/Proxy-Master/main/http.txt', 'GPL-3.0 (copyleft; not combined with CC BY data).', False),
+    proxy_source('proxy-proxyscrape', 'proxyscrape', 'https://api.proxyscrape.com/v2/?request=getproxies&protocol=all&timeout=10000&country=all&ssl=all&anonymity=all',
+                 'Commercial service; free-API terms not reviewed.', False),
+]
 
 
 # ------------------------------------------------------------------- cloud ranges
@@ -244,6 +311,8 @@ SOURCES = [
            'Tor Project, published for exactly this use (blocking or allowing Tor exits).', True),
     Source('icloud-private-relay', RELAY, 'https://mask-api.icloud.com/egress-ip-ranges.csv', parse_icloud,
            'Apple publishes the egress ranges so that services can recognise Private Relay; no licence text.', True),
+    Source('cloudflare-warp', RELAY, 'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS13335', parse_cloudflare_egress,
+           'RIPEstat (RIS) announced prefixes of AS13335 Cloudflare inside its WARP/Gateway egress blocks; RIPE NCC terms, attribution.', True),
     Source('aws', HOSTING, 'https://ip-ranges.amazonaws.com/ip-ranges.json', parse_aws,
            'AWS publishes its ranges for firewall and routing use.', True),
     Source('gcp', HOSTING, 'https://www.gstatic.com/ipranges/cloud.json', parse_gcp,
@@ -289,4 +358,4 @@ SOURCES = [
            'Public status page (host names, resolved by DNS), no licence text.', True),
     Source('fastestvpn', VPN, 'https://support.fastestvpn.com/vpn-servers/', page_hosts('fastestvpn', r'[a-z0-9-]+\.jumptoserver\.com'),
            'Public server page (host names, resolved by DNS), no licence text.', True),
-]
+] + PROXY_SOURCES

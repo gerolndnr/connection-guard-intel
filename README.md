@@ -6,12 +6,13 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 | --- | --- |
 | `vpn.txt` | Commercial VPN servers and exits from 14 operators, the ranges around them, and VPN-dominated data-centre networks: positive |
 | `tor.txt` | Tor exits: positive |
-| `relay.txt` | iCloud Private Relay: its own setting, allowed by default |
+| `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting, allowed by default |
+| `proxy.txt` | Open proxies named by public proxy lists of at least two different maintainers, kept 7 days: positive. Read by Connection Guard 0.6.1 and later; listed in `manifest.json` under `additional_lists`, which 0.6.0 ignores. Never inside a relay range. |
 | `hosting.txt` | Data centres and clouds: review only, never a VPN verdict on its own. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
 
 An address that is on no list is **unknown**, not clean. Connection Guard then asks its next detection service.
 
-Lists: `https://intel.connectionguard.net/{vpn,tor,relay,hosting}.txt`, `manifest.json` and `manifest.json.sig`, rebuilt daily. Sources, terms and the takedown route are in [SOURCES.md](SOURCES.md); corrections and objections go to legal@connectionguard.net.
+Lists: `https://intel.connectionguard.net/{vpn,tor,relay,hosting,proxy}.txt`, `manifest.json` and `manifest.json.sig`, rebuilt daily. Sources, terms and the takedown route are in [SOURCES.md](SOURCES.md); corrections and objections go to legal@connectionguard.net.
 
 ## How it is built
 

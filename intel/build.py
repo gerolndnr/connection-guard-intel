@@ -15,10 +15,11 @@ import os
 import sys
 import time
 
-from .model import CATEGORIES, HOSTING, VPN, Entry, fetch
+from .model import ADDITIONAL, CATEGORIES, HOSTING, PROXY, RELAY, VPN, Entry, fetch
 from .sources import SOURCES
 
 LIST_LIMIT = 4 * 1024 * 1024  # the plugin's bound for one decompressed list
+MANIFEST_LIMIT = 60_000       # the plugin rejects a manifest above 65,536 bytes; keep a margin
 SHRINK_ALARM = 0.20
 
 
@@ -176,6 +177,45 @@ def with_history(entries, path, now):
     return list(entries) + old, len(old)
 
 
+# Open proxies (evaluated 7 October 2026 on the benchmark's 692 addresses, see README): an address counts when lists of
+# at least two different maintainers name it on the same day, and stays for 7 days after that. Proxies often sit on
+# home connections whose address changes, so the history is half the VPN history. An address inside a RELAY range
+# (iCloud Private Relay, WARP) is never listed: many people share those exits.
+PROXY_MIN_LISTS = 2
+PROXY_HISTORY_DAYS = 7
+
+
+def proxy_networks(entries, groups, relay, path, now):
+    """Collapsed proxy list and how many of its addresses come from the history only."""
+    import ipaddress
+    seen = {}
+    for e in entries:
+        if e.category == PROXY:
+            seen.setdefault(e.network, set()).add(groups.get(e.source, e.source))
+    agreed = {n for n, g in seen.items() if len(g) >= PROXY_MIN_LISTS}
+    history = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            history = json.load(f)
+    stamp = now.timestamp()
+    for n in agreed:
+        history[str(n)] = stamp
+    history = {k: v for k, v in history.items() if stamp - v <= PROXY_HISTORY_DAYS * 86400}
+    with open(path, 'w') as f:
+        json.dump(history, f, sort_keys=True)
+    relay4 = _Index(n for n in relay if n.version == 4)
+    relay6 = [n for n in relay if n.version == 6]
+    keep = []
+    for k in history:
+        n = ipaddress.ip_network(k)
+        if (n in relay4) if n.version == 4 else any(n.subnet_of(r) for r in relay6):
+            continue
+        keep.append(n)
+    v4 = sorted(ipaddress.collapse_addresses(n for n in keep if n.version == 4))
+    v6 = sorted(ipaddress.collapse_addresses(n for n in keep if n.version == 6))
+    return v4 + v6, len(set(history) - {str(n) for n in agreed})
+
+
 def build(out, include_all=False, force=False, sources=None, key_pem=None, now=None, state=None, dense_min=DENSE_ASN_MIN_OPERATORS):
     sources = [s for s in (sources or SOURCES) if include_all or s.redistribute]
     now = now or datetime.datetime.now(datetime.timezone.utc)
@@ -192,20 +232,29 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
             previous = json.load(f)
     counts = {c: len(n) for c, n in result.items()}
     warnings = check_shrink(previous, counts, force)
+    groups = {s.id: s.group for s in sources if s.group}
+    proxies, proxies_from_history = proxy_networks(entries, groups, result[RELAY], os.path.join(state or 'state', 'proxy-history.json'), now)
     manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=report, warnings=warnings, lists={},
+                    additional_lists={},
+                    proxy=dict(min_lists=PROXY_MIN_LISTS, history_days=PROXY_HISTORY_DAYS, addresses_from_history=proxies_from_history),
                     vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
                     inference=dict(min_hits_24=MIN_HITS_24, min_24s_per_22=MIN_24S_PER_22, dense_asn_min_operators=dense_min,
                                    dense_asns={str(k): v for k, v in sorted(dense.items())}))
-    for category, networks in result.items():
+    for category, networks in list(result.items()) + ([(PROXY, proxies)] if proxies else []):
         body = render(category, networks, report, as_of)
         if len(body) > LIST_LIMIT:
             raise SystemExit(f'{category}: {len(body)} bytes exceeds the plugin limit of {LIST_LIMIT}')
         name = f'{category.lower()}.txt'
         with open(os.path.join(out, name), 'wb') as f:
             f.write(body)
-        manifest['lists'][category] = dict(file=name, sha256=hashlib.sha256(body).hexdigest(), bytes=len(body),
-                                           networks=len(networks), addresses=addresses(networks))
+        target = manifest['additional_lists'] if category in ADDITIONAL else manifest['lists']
+        target[category] = dict(file=name, sha256=hashlib.sha256(body).hexdigest(), bytes=len(body),
+                                networks=len(networks), addresses=addresses(networks))
+    if set(manifest['lists']) != set(CATEGORIES):
+        raise SystemExit(f'manifest lists must be exactly {CATEGORIES} for Connection Guard 0.6.0, got {sorted(manifest["lists"])}')
     data = json.dumps(manifest, indent=1, sort_keys=True).encode()
+    if len(data) > MANIFEST_LIMIT:
+        raise SystemExit(f'manifest.json is {len(data)} bytes; Connection Guard rejects manifests above 65,536 (limit here {MANIFEST_LIMIT})')
     with open(os.path.join(out, 'manifest.json'), 'wb') as f:
         f.write(data)
     key_pem = key_pem or os.environ.get('INTEL_SIGNING_KEY')
@@ -227,7 +276,7 @@ def main(argv=None):
     m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn)
     for r in m['sources']:
         print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r['error'] else ''))
-    for c, l in m['lists'].items():
+    for c, l in {**m['lists'], **m.get('additional_lists', {})}.items():
         print(f"{c:8} {l['networks']:>7} networks {l['addresses']:>14,} addresses {l['bytes']/1e6:5.2f} MB")
     failed = [r for r in m['sources'] if r['status'] != 'ok']
     for r in failed:
