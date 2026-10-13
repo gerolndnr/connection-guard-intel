@@ -269,6 +269,17 @@ def page_hosts(source, pattern, resolve=None):
     return parse
 
 
+def page_table(source, pattern, resolve=None):
+    """An operator's public server table: the addresses printed in rows that name one of its hosts, plus those hosts
+    resolved by DNS (a server keeps its printed address when DNS fails, and a moved server its new one)."""
+    rx, ip = re.compile(pattern), re.compile(r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])')
+    def parse(body):
+        rows = [r for r in re.findall(r'<tr\b.*?</tr>', body.decode('utf-8', 'replace'), re.S) if rx.search(r)]
+        hosts = sorted({h for r in rows for h in rx.findall(r)})
+        return vpn(sorted({a for r in rows for a in ip.findall(r)}) + (resolve or resolve_all)(hosts), source)
+    return parse
+
+
 def vpn(texts, source):
     out = []
     for t in texts:
@@ -388,4 +399,8 @@ SOURCES = [
            'Public status page (host names, resolved by DNS), no licence text.', True),
     Source('fastestvpn', VPN, 'https://support.fastestvpn.com/vpn-servers/', page_hosts('fastestvpn', r'[a-z0-9-]+\.jumptoserver\.com'),
            'Public server page (host names, resolved by DNS), no licence text.', True),
+    # Added 13 October 2026 under the same decision and safeguards; suggested by zowi. The page footer says
+    # "All Rights Reserved" and gives no reuse terms, so only the addresses are taken.
+    Source('worldvpn', VPN, 'https://www.worldvpn.net/servers', page_table('worldvpn', r'\b[a-z0-9-]+\.ocservvpn\.com\b'),
+           'Public server page (addresses and host names, resolved by DNS); footer "All Rights Reserved", no reuse terms.', True),
 ] + PROXY_SOURCES

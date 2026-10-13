@@ -24,6 +24,7 @@ Each source is fetched without a key. `redistribute` (in `intel/sources.py`) say
 | OVPN server API | VPN | Public API used by its apps, no licence text | yes (added 7 Oct 2026) |
 | AzireVPN locations (pool host names, resolved by DNS) | VPN | Public API, no licence text | yes (added 7 Oct 2026) |
 | PrivateVPN, vpn.ac, FastestVPN server pages (host names, resolved by DNS) | VPN | Public web pages, no licence text | yes (added 7 Oct 2026) |
+| WorldVPN server page (printed addresses and host names, resolved by DNS) | VPN | Public web page; footer "All Rights Reserved", no reuse terms. Only the addresses are taken | yes (added 13 Oct 2026, owner decision) |
 | Proton logicals | VPN | Needs a Proton login since 2026 ("Invalid access token"); we use no accounts and imitate no app. ProtonVPN is covered by Proton AG's VPN networks (below) and the hosting rules | no |
 | VPN Gate | VPN | Volunteers' home connections that rotate hourly; not used | no |
 | Vultr geofeed | HOSTING | To be added (TLS chain issue on the test machine only) | – |

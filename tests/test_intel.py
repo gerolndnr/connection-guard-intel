@@ -79,6 +79,11 @@ class Parsers(unittest.TestCase):
         self.assertEqual(nets(parsed), ['185.65.134.70/32', '89.35.28.140/32'])
         page = b'<td>ae-dub.pvdata.host</td><td>evil.example.com</td>'
         self.assertEqual(nets(sources.page_hosts('privatevpn', r'[a-z0-9-]+\.pvdata\.host', resolve=lambda hosts: ['91.90.120.5'] if hosts == ['ae-dub.pvdata.host'] else [])(page)), ['91.90.120.5/32'])
+        table = (b'<tr><td>Germany S1</td><td>116.203.253.222</td><td>de1.ocservvpn.com</td></tr>'
+                 b'<tr><td>Contact</td><td>1.1.1.1</td></tr><tr><td>Austria</td><td>at1.ocservvpn.com</td></tr>')
+        parsed = sources.page_table('worldvpn', r'\b[a-z0-9-]+\.ocservvpn\.com\b',
+                                    resolve=lambda hosts: ['91.132.139.10'] if hosts == ['at1.ocservvpn.com', 'de1.ocservvpn.com'] else [])(table)
+        self.assertEqual(nets(parsed), ['116.203.253.222/32', '91.132.139.10/32'])
 
     def test_private_and_special_addresses_are_never_listed(self):
         for text in ('10.1.2.3', '192.168.0.1', '127.0.0.1', '::1', 'fe80::1', '224.0.0.1', 'not-an-ip'):
