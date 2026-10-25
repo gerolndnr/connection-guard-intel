@@ -41,7 +41,8 @@ def exact(networks):
 def split(old_dir, new_dir):
     old_vpn = load(os.path.join(old_dir, 'vpn.txt'))
     old_exact = exact(old_vpn)
-    new = sorted(a for a in exact(load(os.path.join(new_dir, 'vpn.txt'))) if a not in old_exact)
+    new = sorted((a for a in exact(load(os.path.join(new_dir, 'vpn.txt'))) if a not in old_exact),
+                 key=lambda a: (a.version, int(a)))
     vpn, hosting = Index(old_vpn), Index(load(os.path.join(old_dir, 'hosting.txt')))
     caught = [a for a in new if str(a) in vpn]
     review = [a for a in new if str(a) not in vpn and str(a) in hosting]

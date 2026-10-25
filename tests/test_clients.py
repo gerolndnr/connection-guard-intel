@@ -4,6 +4,7 @@ import hashlib
 import http.server
 import json
 import os
+import subprocess
 import sys
 import threading
 import unittest
@@ -74,6 +75,24 @@ class Client(unittest.TestCase):
         self.files['manifest.json'] = self.files['manifest.json'].replace(b'89.35', b'89.36') + b' '
         with self.assertRaises(Exception):
             self.download()
+
+    def test_javascript_maps_both_ipv4_mapped_spellings_to_the_same_verdict(self):
+        client = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'clients', 'js', 'cg-intel.mjs'))
+        script = '''
+import {pathToFileURL} from 'node:url';
+const [client, host, publicKey, stamp] = process.argv.slice(1);
+process.argv[1] = 'fixture-runner'; // importing the client must not select its CLI entry point
+const {downloadIntel} = await import(pathToFileURL(client));
+const intel = await downloadIntel({host, publicKey, now: Date.parse(stamp)});
+console.log(JSON.stringify(['89.35.28.7', '::ffff:89.35.28.7', '::ffff:5923:1c07'].map(ip => intel.lookup(ip))));
+'''
+        result = subprocess.run(['node', '--input-type=module', '-e', script, client, self.host, self.public.decode(), NOW.isoformat()],
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        verdicts = json.loads(result.stdout)
+        self.assertEqual(verdicts[0], verdicts[1])
+        self.assertEqual(verdicts[0], verdicts[2])
+        self.assertTrue(verdicts[0]['block'])
 
     def test_list_that_does_not_match_the_manifest_is_refused(self):
         self.files['vpn.txt'] = self.files['vpn.txt'].replace(b'89.35.28.0/24', b'89.35.29.0/24')

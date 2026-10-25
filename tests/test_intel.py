@@ -197,6 +197,20 @@ class Rules(unittest.TestCase):
 
 
 class Report(unittest.TestCase):
+    def test_time_split_accepts_new_servers_from_both_address_families(self):
+        from intel import timesplit
+        with tempfile.TemporaryDirectory() as root:
+            old, new = os.path.join(root, 'old'), os.path.join(root, 'new')
+            for path, vpn in ((old, ''), (new, '89.35.28.7/32\n2a0d:5600::1/128\n')):
+                os.makedirs(path)
+                for name, text in (('vpn.txt', vpn), ('hosting.txt', ''), ('manifest.json', '{"as_of":"2026-10-25T00:00:00Z"}')):
+                    with open(os.path.join(path, name), 'w') as output:
+                        output.write(text)
+            result = timesplit.split(old, new)
+            self.assertEqual(result['new_servers'], 2)
+            self.assertEqual(result['by_family'], {4: 1, 6: 1})
+            self.assertEqual(result['missed'], 2)
+
     def manifest(self, as_of, vpn, sources, dense):
         lists = {c: dict(networks=n, addresses=n) for c, n in (('VPN', vpn), ('TOR', 10), ('RELAY', 5), ('HOSTING', 7))}
         return dict(as_of=as_of, lists=lists, additional_lists={}, inference=dict(dense_asns=dense, dense_asn_min_operators=4),

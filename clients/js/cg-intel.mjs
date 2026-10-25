@@ -94,8 +94,10 @@ export async function downloadIntel({ host = HOST, publicKey = PUBLIC_KEY, now =
     asOf: manifest.as_of,
     /** Categories (VPN, TOR, PROXY, RELAY, HOSTING) and labels (BOOSTER, MOBILE, SHARED). On no list = unknown, not clean. */
     lookup(ip) {
-      const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip); // from dual-stack proxies
-      const address = toBig(mapped ? mapped[1] : ip);
+      let address = toBig(ip);
+      // Dual-stack proxies can spell mapped addresses with a dotted or hexadecimal tail.
+      if (address.family === 6 && address.value >> 32n === 0xffffn)
+        address = { family: 4, value: address.value & 0xffffffffn };
       const found = Object.keys(lists).filter((name) => lists[name].has(address)).sort();
       const categories = found.filter((f) => !LABELS.includes(f));
       return { categories, labels: found.filter((f) => LABELS.includes(f)), block: categories.some((c) => BLOCK.includes(c)), asOf: manifest.as_of };
