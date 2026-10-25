@@ -10,7 +10,7 @@ import unittest
 import zipfile
 
 from intel import build, sources
-from intel.model import HOSTING, RELAY, TOR, VPN, Entry, net
+from intel.model import BOOSTER, HOSTING, MOBILE, RELAY, SHARED, TOR, VPN, Entry, net
 
 
 def nets(entries):
@@ -98,6 +98,22 @@ class Parsers(unittest.TestCase):
         self.assertEqual(sources.gluetun_source('vpn unlimited').id, 'vpnunlimited')
         self.assertTrue(sources.gluetun_source('vpn unlimited').url.endswith('/vpn%20unlimited.json'))
 
+    def test_mudfish_node_hosts_come_from_the_status_table(self):
+        body = (b'<tr role="row" data-name="AE Middle East (Dubai - Aliyun)">\n <td class="node-name" role="cell">\n'
+                b'  <a href="/admin/serverstatus/421" data-sid="421"></a></td></tr>'
+                b'<tr role="row" data-name="JP Tokyo (Vultr)">\n <td class="node-name"> <a href="/admin/serverstatus/7">')
+        asked = []
+        resolve = lambda hosts: asked.extend(hosts) or ['47.91.122.48', '10.0.0.1']
+        got = sources.parse_mudfish(body, resolve)
+        self.assertEqual(asked, ['node-ae-00421.mudfish.net', 'node-jp-00007.mudfish.net'])
+        self.assertEqual([(str(e.network), e.category) for e in got], [('47.91.122.48/32', BOOSTER)])
+
+    def test_signals_skip_prefixes_the_servers_own_rules_let_in(self):
+        row = lambda p, allowed: dict(p=p, sources=3, logins=100, accounts=40, vpn=0, denied=0, banned=5, allowed_by_rule=allowed)
+        body = json.dumps({'prefixes': [row('89.35.30.0/24', 0), row('89.35.31.0/24', 30), row('10.0.0.0/24', 0)]}).encode()
+        self.assertEqual(nets(sources.parse_signals(body)), ['89.35.30.0/24'])
+        self.assertEqual(sources.parse_signals(b'{"prefixes": []}'), [])
+
     def test_private_and_special_addresses_are_never_listed(self):
         for text in ('10.1.2.3', '192.168.0.1', '127.0.0.1', '::1', 'fe80::1', '224.0.0.1', 'not-an-ip'):
             self.assertIsNone(net(text), text)
@@ -135,6 +151,39 @@ class Rules(unittest.TestCase):
     def test_lists_collapse_per_category(self):
         result = build.lists([self.e('185.220.101.0/32', TOR, 'tor'), self.e('185.220.101.1/32', TOR, 'tor')])
         self.assertEqual([str(n) for n in result[TOR]], ['185.220.101.0/31'])
+
+    def test_label_lists_leave_shared_exits_that_a_relay_or_mobile_network_explains(self):
+        entries = [self.e('172.56.0.0/16', MOBILE, 'mobile-asn-21928', 'prefix'), self.e('47.91.122.48/32', BOOSTER, 'mudfish'),
+                   self.e('172.56.10.0/24', SHARED, 'network-signals', 'signals'), self.e('104.28.1.0/24', SHARED, 'network-signals', 'signals'),
+                   self.e('198.51.100.0/24', SHARED, 'network-signals', 'signals')]
+        result = {RELAY: [ipaddress.ip_network('104.28.0.0/16')]}
+        labels = build.label_lists(entries, result)
+        self.assertEqual([str(n) for n in labels[SHARED]], ['198.51.100.0/24'])
+        self.assertEqual([str(n) for n in labels[BOOSTER]], ['47.91.122.48/32'])
+        self.assertEqual([str(n) for n in labels[MOBILE]], ['172.56.0.0/16'])
+
+    def test_booster_nodes_leave_inferred_vpn_ranges_but_not_published_servers(self):
+        vpn = [ipaddress.ip_network('31.171.152.0/22'), ipaddress.ip_network('5.0.0.0/24')]
+        entries = [self.e('31.171.154.10/32', BOOSTER, 'mudfish'), self.e('5.0.0.9/32', BOOSTER, 'mudfish'), self.e('5.0.0.9/32')]
+        got = build.without_boosters(entries, vpn)
+        self.assertEqual(sum(n.num_addresses for n in got), 1024 - 1 + 256)
+        self.assertFalse(any(ipaddress.ip_address('31.171.154.10') in n for n in got))
+        self.assertIn(ipaddress.ip_network('5.0.0.0/24'), got)
+        self.assertEqual(build.punch(vpn, [ipaddress.ip_network('9.9.9.9/32')]), sorted(vpn))
+
+    def test_time_split_scores_only_servers_the_earlier_build_did_not_see(self):
+        from intel import timesplit
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'h.json')
+            with open(path, 'w') as f:
+                json.dump({'31.171.154.10/32': dict(source='op', method='exact', last_seen=0)}, f)
+            today = [self.e('31.171.152.0/22', HOSTING, 'asn-100', 'prefix'), self.e('31.171.154.10/32'),
+                     self.e('31.171.154.99/32'),             # new, inside the inferred /24
+                     self.e('31.171.153.5/32'),              # new, hosting only
+                     self.e('89.35.28.1/32'),                # new, missed
+                     self.e('89.35.29.1/32', source='other')]  # an operator the earlier build did not have
+            r = timesplit.simulate(path, today)
+            self.assertEqual(r['rows'], {'op': dict(new=3, rules=1, networks=0, hosting_only=1)})
 
     def test_history_keeps_rotated_addresses_for_14_days(self):
         with tempfile.TemporaryDirectory() as d:

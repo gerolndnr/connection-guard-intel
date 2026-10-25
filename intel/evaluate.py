@@ -13,7 +13,7 @@ import ipaddress
 import json
 import os
 
-from .model import CATEGORIES, HOSTING, PROXY, RELAY, TOR, VPN
+from .model import BOOSTER, CATEGORIES, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN
 
 POSITIVE_COHORTS = ('commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy')
 NEGATIVE_COHORTS = ('residential', 'mobile_cgnat', 'residential_v6')
@@ -55,6 +55,9 @@ def score(indexes, items, holdout=()):
             rows[key]['blocked' if verdict in (TOR, VPN, PROXY) else 'relay'] += 1
         if item['ip'] in indexes[HOSTING]:
             rows[key]['hosting'] += 1
+        for label in (BOOSTER, MOBILE, SHARED):
+            if label in indexes and item['ip'] in indexes[label]:
+                rows[key][label.lower()] += 1
     return rows
 
 
@@ -68,8 +71,9 @@ def main(argv=None):
     holdout = tuple(h for h in a.holdout.split(',') if h)
     items = [json.loads(l) for l in open(a.dataset)]
     indexes = {c: Index(load(os.path.join(a.lists, f'{c.lower()}.txt'))) for c in CATEGORIES}
-    if os.path.exists(os.path.join(a.lists, 'proxy.txt')):  # read by Connection Guard 0.6.1 and later
-        indexes[PROXY] = Index(load(os.path.join(a.lists, 'proxy.txt')))
+    for extra in (PROXY, BOOSTER, MOBILE, SHARED):  # additional lists, read by Connection Guard 0.6.1 and later
+        if os.path.exists(os.path.join(a.lists, f'{extra.lower()}.txt')):
+            indexes[extra] = Index(load(os.path.join(a.lists, f'{extra.lower()}.txt')))
     if holdout:
         # Re-parse the sources without the held-out operators. Hosting ranges and operator networks stay in, because
         # the inference rules need them; an operator ASN of a held-out operator is left out as well.
@@ -80,10 +84,11 @@ def main(argv=None):
         indexes[VPN] = Index(lists(entries, a.dense_asn)[VPN])
     rows = score(indexes, items, holdout)
     order = sorted(rows, key=lambda k: (k.split(' ')[0] not in POSITIVE_COHORTS, k))
-    print(f"{'cohort':44}{'n':>5}{'blocked':>9}{'%':>6}{'relay':>7}{'hosting':>9}")
+    print(f"{'cohort':44}{'n':>5}{'blocked':>9}{'%':>6}{'relay':>7}{'hosting':>9}{'mobile':>8}{'booster':>9}{'shared':>8}")
     for k in order:
         r = rows[k]
-        print(f"{k:44}{r['n']:>5}{r['blocked']:>9}{100 * r['blocked'] / r['n']:>5.0f}%{r['relay']:>7}{r['hosting']:>9}")
+        print(f"{k:44}{r['n']:>5}{r['blocked']:>9}{100 * r['blocked'] / r['n']:>5.0f}%{r['relay']:>7}{r['hosting']:>9}"
+              f"{r['mobile']:>8}{r['booster']:>9}{r['shared']:>8}")
 
 
 if __name__ == '__main__':

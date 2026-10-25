@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .model import HOSTING, PROXY, RELAY, TOR, VPN, Entry, net
+from .model import BOOSTER, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, net
 
 
 @dataclass
@@ -311,6 +311,50 @@ def gluetun_source(provider):
                   'gluetun-servers (MIT licence, github.com/qdm12/gluetun-servers); host names resolved by DNS.', True, optional=True)
 
 
+# ------------------------------------------------------------------- labels (additional lists)
+def parse_mudfish(body, resolve=None):
+    """Mudfish's public node status page: each row names a node by country and id; its host is
+    node-<country>-<id, five digits>.mudfish.net, resolved by DNS."""
+    rows = re.findall(r'data-name="([A-Z]{2})\b[^"]*">\s*<td[^>]*>\s*<a href="/admin/serverstatus/(\d+)"', body.decode('utf-8', 'replace'))
+    hosts = sorted({f'node-{cc.lower()}-{int(sid):05d}.mudfish.net' for cc, sid in rows})
+    return [Entry(n, BOOSTER, 'mudfish', 'exact') for n in (net(ip) for ip in (resolve or resolve_all)(hosts)) if n is not None]
+
+
+# Networks that carry only (or almost only) mobile subscribers, behind carrier-grade NAT. Holder names checked on
+# RIPEstat on 25 October 2026; carriers whose ASN also carries fixed lines or business customers are left out.
+MOBILE_ASNS = {
+    21928: 'T-Mobile USA', 22394: 'Verizon Wireless (Cellco)', 6167: 'Verizon Wireless (Cellco)', 20057: 'AT&T Mobility',
+    20365: 'Freedom Mobile', 28403: 'Telcel (RadioMovil Dipsa)', 26615: 'TIM Brasil', 206067: 'Three UK', 51207: 'Free Mobile',
+    39603: 'Play (P4)', 16135: 'Turkcell', 55836: 'Reliance Jio', 45609: 'Bharti Airtel mobile', 38266: 'Vodafone Idea',
+    9644: 'SK Telecom', 132199: 'Globe mobile', 23693: 'Telkomsel', 24203: 'XL Axiata',
+}
+
+
+def parse_mobile_asn(source):
+    def parse(body):
+        return entries([p['prefix'] for p in json.loads(body)['data']['prefixes']], MOBILE, source, 'prefix')
+    return parse
+
+
+SIGNALS_URL = 'https://api.connectionguard.net/v1/intel/signals.json'
+# A prefix that the servers' own rules let in this often is a known community network (school, LAN party, family),
+# not an anonymous exit.
+SHARED_MAX_ALLOWED_SHARE = 0.10
+
+
+def parse_signals(body):
+    """Prefixes that several networks of Connection Guard servers report many accounts from (the cloud publishes
+    only prefixes with at least 3 sources and 10 accounts; apps/api/src/signals.ts in connection-guard-cloud)."""
+    out = []
+    for p in json.loads(body).get('prefixes') or []:
+        if p['allowed_by_rule'] > SHARED_MAX_ALLOWED_SHARE * max(1, p['logins']):
+            continue
+        n = net(p['p'], 'prefix')
+        if n is not None:
+            out.append(Entry(n, SHARED, 'network-signals', 'signals'))
+    return out
+
+
 def vpn(texts, source):
     out = []
     for t in texts:
@@ -434,4 +478,15 @@ SOURCES = [
     # "All Rights Reserved" and gives no reuse terms, so only the addresses are taken.
     Source('worldvpn', VPN, 'https://www.worldvpn.net/servers', page_table('worldvpn', r'\b[a-z0-9-]+\.ocservvpn\.com\b'),
            'Public server page (addresses and host names, resolved by DNS); footer "All Rights Reserved", no reuse terms.', True),
-] + [gluetun_source(p) for p in GLUETUN_PROVIDERS] + PROXY_SOURCES
+] + [gluetun_source(p) for p in GLUETUN_PROVIDERS] + PROXY_SOURCES + [
+    Source('mudfish', BOOSTER, 'https://mudfish.net/server/status', parse_mudfish,
+           'Public node status page (host names, resolved by DNS), no licence text.', True, optional=True),
+] + [
+    Source(f'mobile-asn-{asn}', MOBILE, f'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
+           parse_mobile_asn(f'mobile-asn-{asn}'), f'RIPEstat (RIS), AS{asn} {name}.', True, optional=True)
+    for asn, name in MOBILE_ASNS.items()
+] + [
+    # Evaluation only until the benchmark shows its false-positive rate (plan, phase 5).
+    Source('network-signals', SHARED, SIGNALS_URL, parse_signals,
+           'Connection Guard network signals: prefixes and counts only, from at least 3 sources.', False, optional=True),
+]

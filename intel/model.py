@@ -15,7 +15,12 @@ CATEGORIES = (VPN, TOR, RELAY, HOSTING)
 # Published in manifest.json under `additional_lists`, never in `lists`: Connection Guard 0.6.0 accepts a manifest only
 # when `lists` holds exactly the four categories above, and ignores other top-level fields.
 PROXY = 'PROXY'      # open proxy listed by several public proxy lists: positive (Connection Guard 0.6.1 and later)
-ADDITIONAL = (PROXY,)
+# Labels, never a verdict on their own (Connection Guard 0.6.2 and later; older versions ignore them):
+BOOSTER = 'BOOSTER'  # gaming booster node (Mudfish): a player tunnels for latency, not to hide; the operator may allow it
+MOBILE = 'MOBILE'    # mobile carrier network behind carrier-grade NAT: many players share one address, so IP bans
+                     # and IP-based alt detection hit innocent players
+SHARED = 'SHARED'    # an exit that many accounts use across several servers (network signals): review, may be a proxy
+ADDITIONAL = (PROXY, BOOSTER, MOBILE, SHARED)
 
 USER_AGENT = 'connection-guard-intel/0.1 (+https://github.com/gerolndnr/connection-guard-intel)'
 
