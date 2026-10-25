@@ -15,7 +15,7 @@ import os
 import sys
 import time
 
-from .model import ADDITIONAL, CATEGORIES, HOSTING, PROXY, RELAY, TOR, VPN, Entry, fetch
+from .model import ADDITIONAL, BOOSTER, CATEGORIES, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, fetch
 from .sources import SOURCES
 
 LIST_LIMIT = 4 * 1024 * 1024  # the plugin's bound for one decompressed list
@@ -119,6 +119,47 @@ def lists(entries, dense_min=DENSE_ASN_MIN_OPERATORS):
         v6 = list(ipaddress.collapse_addresses(n for n in nets if n.version == 6))
         out[category] = sorted(v4) + sorted(v6)
     return out
+
+
+LABELS = (BOOSTER, MOBILE, SHARED)
+
+
+def label_lists(entries, result):
+    """The label lists, collapsed. A shared exit inside a relay or mobile network is already explained by that list."""
+    from .evaluate import Index
+    out = {}
+    for category in LABELS:
+        nets = [e.network for e in entries if e.category == category]
+        out[category] = sorted(ipaddress.collapse_addresses(n for n in nets if n.version == 4)) + \
+            sorted(ipaddress.collapse_addresses(n for n in nets if n.version == 6))
+    explained = Index(result[RELAY] + out[MOBILE])
+    out[SHARED] = [n for n in out[SHARED] if str(n.network_address) not in explained]
+    return out
+
+
+def punch(networks, holes):
+    """`networks` without the addresses in `holes`; a hole splits only the network that contains it."""
+    index = {}
+    for n in networks:
+        index.setdefault((n.version, n.prefixlen), set()).add(n)
+    for hole in holes:
+        for length in range(hole.prefixlen + 1):
+            outer = hole.supernet(new_prefix=length) if length < hole.prefixlen else hole
+            if outer in index.get((hole.version, length), ()):
+                index[(hole.version, length)].discard(outer)
+                for piece in outer.address_exclude(hole) if outer != hole else ():
+                    index.setdefault((piece.version, piece.prefixlen), set()).add(piece)
+                break
+    nets = [n for group in index.values() for n in group]
+    return sorted(n for n in nets if n.version == 4) + sorted(n for n in nets if n.version == 6)
+
+
+def without_boosters(entries, vpn):
+    """Booster nodes are taken out of inferred VPN ranges: a player tunnels through them for a better ping, and the
+    BOOSTER list lets the operator decide. A booster address that a VPN operator publishes as its own server stays."""
+    from .evaluate import Index
+    published = Index([e.network for e in entries if e.category == VPN and e.method == 'exact'])
+    return punch(vpn, [e.network for e in entries if e.category == BOOSTER and str(e.network.network_address) not in published])
 
 
 def render(category, networks, report, as_of):
@@ -229,6 +270,7 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     entries, kept = with_history(entries, os.path.join(state or 'state', 'vpn-history.json'), now)
     entries, tor_kept = with_history(entries, os.path.join(state or 'state', 'tor-history.json'), now, TOR, TOR_HISTORY_DAYS)
     result = lists(entries, dense_min)
+    result[VPN] = without_boosters(entries, result[VPN])
     _, dense = dense_hosting(entries, dense_min)
     previous = None
     if os.path.exists(os.path.join(out, 'manifest.json')):
@@ -245,7 +287,8 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
                     tor_addresses_from_history=tor_kept, tor_history_days=TOR_HISTORY_DAYS,
                     inference=dict(min_hits_24=MIN_HITS_24, min_24s_per_22=MIN_24S_PER_22, dense_asn_min_operators=dense_min,
                                    dense_asns={str(k): v for k, v in sorted(dense.items())}))
-    for category, networks in list(result.items()) + ([(PROXY, proxies)] if proxies else []):
+    labels = [(c, n) for c, n in label_lists(entries, result).items() if n]
+    for category, networks in list(result.items()) + ([(PROXY, proxies)] if proxies else []) + labels:
         body = render(category, networks, report, as_of)
         if len(body) > LIST_LIMIT:
             raise SystemExit(f'{category}: {len(body)} bytes exceeds the plugin limit of {LIST_LIMIT}')
