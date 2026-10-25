@@ -280,6 +280,37 @@ def page_table(source, pattern, resolve=None):
     return parse
 
 
+GLUETUN_MAX_AGE_DAYS = 120
+
+
+def parse_gluetun(source, resolve=None, now=None, max_age_days=GLUETUN_MAX_AGE_DAYS):
+    """One provider file of gluetun-servers (MIT): every server's host name, resolved by DNS now, plus the addresses
+    the file records when its last update is at most `max_age_days` old. A stale file still contributes host names,
+    and a host name that no longer resolves contributes nothing."""
+    import time
+    def parse(body):
+        j = json.loads(body)
+        servers = j.get('servers') or []
+        fresh = (now or time.time()) - (j.get('timestamp') or 0) <= max_age_days * 86400
+        recorded = [ip for s in servers for ip in s.get('ips') or []] if fresh else []
+        hosts = sorted({s['hostname'] for s in servers if s.get('hostname')})
+        return vpn(recorded + (resolve or resolve_all)(hosts), source)
+    return parse
+
+
+GLUETUN = 'https://raw.githubusercontent.com/qdm12/gluetun-servers/main/pkg/servers/'
+# Providers without a public server list of their own, from the server data the gluetun VPN client maintains
+# (github.com/qdm12/gluetun-servers, MIT). Added 25 October 2026. Operators Intel reads directly stay on their own lists.
+GLUETUN_PROVIDERS = ('cyberghost', 'expressvpn', 'giganews', 'protonvpn', 'purevpn', 'slickvpn', 'torguard',
+                     'vpn unlimited', 'vpnsecure', 'vyprvpn')
+
+
+def gluetun_source(provider):
+    sid = provider.replace(' ', '')
+    return Source(sid, VPN, GLUETUN + provider.replace(' ', '%20') + '.json', parse_gluetun(sid),
+                  'gluetun-servers (MIT licence, github.com/qdm12/gluetun-servers); host names resolved by DNS.', True, optional=True)
+
+
 def vpn(texts, source):
     out = []
     for t in texts:
@@ -403,4 +434,4 @@ SOURCES = [
     # "All Rights Reserved" and gives no reuse terms, so only the addresses are taken.
     Source('worldvpn', VPN, 'https://www.worldvpn.net/servers', page_table('worldvpn', r'\b[a-z0-9-]+\.ocservvpn\.com\b'),
            'Public server page (addresses and host names, resolved by DNS); footer "All Rights Reserved", no reuse terms.', True),
-] + PROXY_SOURCES
+] + [gluetun_source(p) for p in GLUETUN_PROVIDERS] + PROXY_SOURCES

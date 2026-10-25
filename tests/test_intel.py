@@ -85,6 +85,19 @@ class Parsers(unittest.TestCase):
                                     resolve=lambda hosts: ['91.132.139.10'] if hosts == ['at1.ocservvpn.com', 'de1.ocservvpn.com'] else [])(table)
         self.assertEqual(nets(parsed), ['116.203.253.222/32', '91.132.139.10/32'])
 
+    def test_gluetun_provider_files(self):
+        now = 1_800_000_000
+        body = lambda age_days: json.dumps({'timestamp': now - age_days * 86400, 'servers': [
+            {'hostname': 'de1.example-vpn.net', 'ips': ['89.35.28.150', '89.35.28.151']}, {'ips': ['10.0.0.1']}]}).encode()
+        resolve = lambda hosts: ['37.120.212.10'] if hosts == ['de1.example-vpn.net'] else []
+        fresh = sources.parse_gluetun('cyberghost', resolve=resolve, now=now)(body(30))
+        self.assertEqual(nets(fresh), ['37.120.212.10/32', '89.35.28.150/32', '89.35.28.151/32'])
+        self.assertEqual({(e.category, e.source) for e in fresh}, {(VPN, 'cyberghost')})
+        # A file not updated for longer than 120 days contributes only what its host names resolve to today.
+        self.assertEqual(nets(sources.parse_gluetun('hidemyass', resolve=resolve, now=now)(body(200))), ['37.120.212.10/32'])
+        self.assertEqual(sources.gluetun_source('vpn unlimited').id, 'vpnunlimited')
+        self.assertTrue(sources.gluetun_source('vpn unlimited').url.endswith('/vpn%20unlimited.json'))
+
     def test_private_and_special_addresses_are_never_listed(self):
         for text in ('10.1.2.3', '192.168.0.1', '127.0.0.1', '::1', 'fe80::1', '224.0.0.1', 'not-an-ip'):
             self.assertIsNone(net(text), text)
