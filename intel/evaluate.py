@@ -67,6 +67,7 @@ def main(argv=None):
     p.add_argument('--dataset', required=True)
     p.add_argument('--holdout', default='', help='operators to leave out of the VPN list, e.g. pia,surfshark')
     p.add_argument('--dense-asn', type=int, default=None, help='with --holdout: the dense-ASN threshold to rebuild with')
+    p.add_argument('--skip', default='', help='with --holdout: source id prefixes to leave out, e.g. registry-,geofeed-')
     a = p.parse_args(argv)
     holdout = tuple(h for h in a.holdout.split(',') if h)
     items = [json.loads(l) for l in open(a.dataset)]
@@ -80,7 +81,9 @@ def main(argv=None):
         from .build import collect, lists
         from .sources import SOURCES, VPN_OPERATOR_ASNS
         held_asns = {f'operator-asn-{asn}' for asn, name in VPN_OPERATOR_ASNS.items() if any(h.removesuffix('vpn') in name.lower() for h in holdout)}
-        entries, _ = collect([s for s in SOURCES if s.category in (VPN, HOSTING) and s.id not in holdout and s.id not in held_asns])
+        skip = tuple(x for x in a.skip.split(',') if x)
+        entries, _ = collect([s for s in SOURCES if s.category in (VPN, HOSTING) and s.id not in holdout and s.id not in held_asns
+                              and not (skip and s.id.startswith(skip))])
         indexes[VPN] = Index(lists(entries, a.dense_asn)[VPN])
     rows = score(indexes, items, holdout)
     order = sorted(rows, key=lambda k: (k.split(' ')[0] not in POSITIVE_COHORTS, k))

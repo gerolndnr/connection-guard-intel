@@ -350,3 +350,103 @@ class TorHistory(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RegistryGeofeedDns(unittest.TestCase):
+    def test_organisations_must_match_the_whole_name(self):
+        from intel import registry
+        doc = lambda key, name: {'doc': {'strs': [{'str': {'name': 'object-type', 'value': 'organisation'}},
+                                                  {'str': {'name': 'lookup-key', 'value': key}},
+                                                  {'str': {'name': 'org-name', 'value': name}}]}}
+        body = json.dumps({'result': {'docs': [doc('ORG-PS409-RIPE', 'Packethub S.A.'), doc('ORG-SI1-RIPE', 'Saily Inc.'),
+                                                doc('ORG-X1-RIPE', 'Packethub Resellers Ltd')]}}).encode()
+        self.assertEqual(registry.organisations(body, registry.OPERATORS['nordvpn'][1]), [('ORG-PS409-RIPE', 'Packethub S.A.')])
+
+    def test_blocks_become_cidrs_and_carry_their_geofeed(self):
+        from intel import registry
+        obj = lambda first, *attrs: {'primary-key': {'attribute': [{'value': first}]}, 'attributes': {'attribute':
+                                     [{'name': 'inetnum' if '.' in first else 'inet6num', 'value': first}] +
+                                     [{'name': k, 'value': v} for k, v in attrs]}}
+        body = json.dumps({'objects': {'object': [
+            obj('194.169.168.0 - 194.169.169.127', ('country', 'LA'), ('geofeed', 'https://geofeeds.example.net/g.csv')),
+            obj('2a09:a700::/29', ('country', 'PA'), ('remarks', 'Geofeed https://geofeeds.example.net/v6.csv'))]}}).encode()
+        got = registry.blocks(body)
+        self.assertEqual([str(n) for n, _, _ in got], ['194.169.168.0/24', '194.169.169.0/25', '2a09:a700::/29'])
+        self.assertEqual(got[2][2], 'https://geofeeds.example.net/v6.csv')
+        calls = []
+        def get(url):
+            calls.append(url)
+            if 'inet6num' in url:
+                raise OSError('HTTP Error 404: Not Found')  # the RIPE REST API's answer for "no objects"
+            return body
+        entries = registry.parse_registry('registry-x', ['ORG-A', 'ORG-B'], get)(b'{}')
+        self.assertEqual(len(calls), 4)
+        self.assertEqual({(e.category, e.method, e.source) for e in entries}, {(VPN, 'registry', 'registry-x')})
+
+    def test_geofeeds_on_foreign_hosts_only_confirm_the_operators_own_blocks(self):
+        from intel import registry
+        found = [(ipaddress.ip_network('89.35.28.0/24'), 'NL', 'https://broker.example.com/feed.csv'),
+                 (ipaddress.ip_network('89.35.29.0/24'), 'CY', 'https://geo.operator.example/feed.csv')]
+        feeds = {'https://broker.example.com/feed.csv': b'89.35.28.0/25,US,,,\n203.0.113.0/24,DE,,,\n185.65.134.0/24,DE,,,\n',
+                 'https://geo.operator.example/feed.csv': b'# own plan\n89.35.29.0/24,US,,,\n185.65.135.0/24,JP,,,\n'}
+        got, report = registry.geofeed_entries(found, 'geofeed-x', lambda url, limit=None: feeds[url], owned=('operator.example',))
+        self.assertEqual(nets(got), ['185.65.135.0/24', '89.35.28.0/25', '89.35.29.0/24'])
+        self.assertEqual(report['https://broker.example.com/feed.csv'], dict(rows=2, kept=1, owned=False))
+        rows = registry.feed_rows(feeds['https://geo.operator.example/feed.csv'])
+        self.assertEqual(registry.mismatches(found, rows), [('89.35.29.0/24', 'CY', 'US')])
+
+    def test_host_name_schemes_try_the_next_block_only_after_a_hit(self):
+        from intel import hostnames
+        asked = []
+        def resolve(host):
+            asked.append(host)
+            n = int(host.split('-')[2].split('.')[0])
+            return ['185.65.134.%d' % (n % 250)] if host.startswith('node-us-') and 56 <= n <= 140 else []
+        found = hostnames.enumerate_hosts('node-{cc}-{n:02d}.example.net', ('us', 'de'), resolve, workers=4)
+        self.assertEqual(len(found), 85)
+        self.assertEqual(sum(h.startswith('node-de-') for h in asked), 99)
+        self.assertEqual(sum(h.startswith('node-us-') for h in asked), 299)  # 1-99, 100-199, then 200-299 without a hit
+        got = hostnames.parse_scheme('x-dns', 'node-{cc}-{n:02d}.example.net', resolve, ('us',))(b'')
+        self.assertEqual(len(got), 85)
+        self.assertEqual({e.method for e in got}, {'exact'})
+
+
+class ReverseDns(unittest.TestCase):
+    def test_classes(self):
+        from intel import rdns
+        self.assertEqual(rdns.classify('p5df40376.dip0.t-ipconnect.de'), rdns.RESIDENTIAL)
+        self.assertEqual(rdns.classify('cable-hki-54fa98-154.dhcp.inet.fi'), rdns.RESIDENTIAL)
+        self.assertEqual(rdns.classify('nl-ams-wg-001.relays.mullvad.net'), rdns.VPN_NAME)
+        self.assertEqual(rdns.classify('60.223.46.89.baremetal.zare.com'), rdns.SERVER)
+        # Spelled-out addresses and routers say nothing.
+        self.assertIsNone(rdns.classify('unn-149-40-52-40.datapacket.com'))
+        self.assertIsNone(rdns.classify('res-cs1-01c.voxility.net'))
+        self.assertIsNone(rdns.classify(None))
+
+    def test_guard_drops_only_consumer_named_24s_of_a_block(self):
+        from intel import rdns
+        names = {'198.51.100.1': 'a.dyn.isp.example', '198.51.100.128': 'b.dyn.isp.example', '198.51.100.254': None,
+                 '198.51.101.1': 'a.dyn.isp.example', '198.51.101.128': 'nl1.nordvpn.com', '198.51.101.254': 'c.dyn.isp.example'}
+        kept, dropped = rdns.guard([ipaddress.ip_network('198.51.100.0/23')], resolve=lambda ip: names.get(str(ip)))
+        self.assertEqual([str(n) for n in dropped], ['198.51.100.0/24'])
+        self.assertEqual([str(n) for n in kept], ['198.51.101.0/24'])
+
+    def test_ptr_parses_a_compressed_answer(self):
+        from intel import rdns
+        import struct
+        name = lambda s: b''.join(bytes([len(l)]) + l.encode() for l in s.split('.')) + b'\x00'
+        q = name('40.52.40.149.in-addr.arpa') + struct.pack('>HH', 12, 1)
+        answer = b'\xc0\x0c' + struct.pack('>HHIH', 12, 1, 60, 0) + name('unn-149-40-52-40.datapacket.com')
+        msg = lambda qid: struct.pack('>HHHHHH', qid, 0x8180, 1, 1, 0, 0) + q + answer
+        self.assertEqual(rdns._name(msg(1), 12 + len(q) + 12)[0], 'unn-149-40-52-40.datapacket.com')
+
+    def test_build_guard_leaves_hosting_and_seen_servers_alone(self):
+        names = {'89.35.30.1': 'a.dsl.isp.example', '89.35.30.128': 'b.dsl.isp.example'}
+        entries = [Entry(net('89.35.30.0/24', 'prefix'), VPN, 'registry-x', 'registry'),
+                   Entry(net('89.35.31.0/24', 'prefix'), HOSTING, 'asn-1', 'prefix'),
+                   Entry(net('89.35.31.0/25', 'prefix'), VPN, 'registry-y', 'registry'),
+                   Entry(net('89.35.30.7'), VPN, 'mullvad', 'exact')]
+        out, report = build.rdns_guard(entries, resolve=lambda ip: names.get(str(ip)))
+        self.assertEqual(report, dict(checked=1, dropped=['89.35.30.0/24']))
+        self.assertEqual(sorted((str(e.network), e.source) for e in out if e.category == VPN),
+                         [('89.35.30.7/32', 'mullvad'), ('89.35.31.0/25', 'registry-y')])
