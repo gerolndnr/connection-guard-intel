@@ -196,6 +196,28 @@ class Rules(unittest.TestCase):
             self.assertEqual((gone, kept), ([], 0))
 
 
+class Report(unittest.TestCase):
+    def manifest(self, as_of, vpn, sources, dense):
+        lists = {c: dict(networks=n, addresses=n) for c, n in (('VPN', vpn), ('TOR', 10), ('RELAY', 5), ('HOSTING', 7))}
+        return dict(as_of=as_of, lists=lists, additional_lists={}, inference=dict(dense_asns=dense, dense_asn_min_operators=4),
+                    sources=[dict(id=i, category='VPN' if not i.startswith('mobile') else 'MOBILE', entries=e, status=st)
+                             for i, e, st in sources])
+
+    def test_monthly_report_compares_two_manifests(self):
+        from intel import report
+        old = self.manifest('2026-10-01T03:17:00Z', 100, [('mullvad', 50, 'ok'), ('operator-asn-1', 9, 'ok')], {'9009': []})
+        new = self.manifest('2026-11-01T03:17:00Z', 150, [('mullvad', 60, 'ok'), ('nordvpn', 40, 'failed'), ('mobile-asn-1', 3, 'ok'),
+                                                          ('mobile-asn-2', 3, 'ok'), ('operator-asn-1', 9, 'ok')], {'9009': [], '24940': []})
+        text, month = report.report(old, new)
+        self.assertEqual(month, '2026-10')
+        self.assertIn('# Connection Guard Intel, October 2026', text)
+        self.assertIn('| VPN servers and ranges (`vpn.txt`) | 150 | +50 (+50 %) |', text)
+        self.assertIn('- 1 operator publishes their servers (1 a month before); together 60 server addresses (+10 (+20 %)).', text)
+        self.assertIn('(new: AS24940)', text)
+        self.assertIn('- Added: nordvpn, 2 mobile carrier networks.', text)
+        self.assertIn('- Not answering in the latest build: nordvpn.', text)
+
+
 class Guards(unittest.TestCase):
     def test_shrink_alarm(self):
         previous = {'lists': {VPN: {'networks': 1000}}}

@@ -1,0 +1,39 @@
+name: monthly report
+on:
+  schedule: [{ cron: '0 6 1 * *' }]  # after the 03:17 build on the first of the month
+  workflow_dispatch:
+permissions: { contents: write, actions: read }
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # The newest build and the one closest to 30 days before it, from the `lists` artifacts (kept 90 days).
+      - name: Fetch both manifests
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh api --paginate "repos/${{ github.repository }}/actions/artifacts?name=lists&per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | [.id, .created_at] | @tsv' > artifacts.tsv
+          python - <<'EOF'
+          import datetime
+          rows = [(int(i), datetime.datetime.fromisoformat(t.replace('Z', '+00:00'))) for i, t in (l.split('\t') for l in open('artifacts.tsv').read().split('\n') if l)]
+          new = max(rows, key=lambda r: r[1])
+          old = min(rows, key=lambda r: abs((new[1] - r[1]) - datetime.timedelta(days=30)))
+          open('pick.txt', 'w').write(f'{old[0]} {new[0]}\n')
+          EOF
+          read old new < pick.txt
+          for pair in "old:$old" "new:$new"; do
+            mkdir -p "${pair%%:*}"
+            gh api "repos/${{ github.repository }}/actions/artifacts/${pair##*:}/zip" > "${pair%%:*}.zip"
+            unzip -q -o "${pair%%:*}.zip" manifest.json -d "${pair%%:*}"
+          done
+      - name: Write the report
+        run: python -m intel.report --old old/manifest.json --new new/manifest.json --out reports
+      - name: Commit it
+        run: |
+          git add reports
+          git diff --cached --quiet && exit 0
+          git -c user.name="intel report" -c user.email="actions@users.noreply.github.com" commit -q -m "Monthly report $(ls -t reports | head -1 | sed 's/.md//')"
+          git push -q
