@@ -17,6 +17,8 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 
 An address that is on no list is **unknown**, not clean. Connection Guard then asks its next detection service.
 
+**In your own plugin or bot:** [clients/](clients/) has one-file clients for Java, Node.js and Python that verify the signature and check addresses locally.
+
 Lists: `https://intel.connectionguard.net/{vpn,tor,relay,hosting,proxy,booster,mobile}.txt`, `manifest.json` and `manifest.json.sig`, rebuilt daily. Sources, terms and the takedown route are in [SOURCES.md](SOURCES.md); corrections and objections go to legal@connectionguard.net.
 
 ## How it is built
