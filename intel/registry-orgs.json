@@ -1,0 +1,423 @@
+{
+ "note": "RIPE Database organisations registered by VPN operators; reviewed by name. Regenerate with python -m intel.registry discover and review the diff.",
+ "operators": {
+  "astrill": {
+   "brand": "Astrill",
+   "organisations": [
+    {
+     "handle": "ORG-AA1524-RIPE",
+     "name": "Astrill"
+    }
+   ]
+  },
+  "azirevpn": {
+   "brand": "AzireVPN",
+   "organisations": [
+    {
+     "handle": "ORG-NA1205-RIPE",
+     "name": "Netbouncer AB"
+    }
+   ]
+  },
+  "cyberghost": {
+   "brand": "CyberGhost",
+   "organisations": [
+    {
+     "handle": "ORG-CG160-RIPE",
+     "name": "Cyberghost S.R.L. IP Network"
+    },
+    {
+     "handle": "ORG-CS433-RIPE",
+     "name": "Cyberghost SRL"
+    },
+    {
+     "handle": "ORG-CS588-RIPE",
+     "name": "CyberGhost SRL"
+    },
+    {
+     "handle": "ORG-CS718-RIPE",
+     "name": "Cyberghost SRL"
+    }
+   ]
+  },
+  "expressvpn": {
+   "brand": "ExpressVPN",
+   "organisations": [
+    {
+     "handle": "ORG-EA1764-RIPE",
+     "name": "EXPRESS TECHNOLOGIES LTD"
+    },
+    {
+     "handle": "ORG-ETL53-RIPE",
+     "name": "Express Technologies Ltd"
+    },
+    {
+     "handle": "ORG-EV21-RIPE",
+     "name": "Express Technologies Ltd."
+    }
+   ]
+  },
+  "hotspotshield": {
+   "brand": "Hotspot Shield",
+   "organisations": [
+    {
+     "handle": "ORG-PI133-RIPE",
+     "name": "Pango Inc"
+    }
+   ]
+  },
+  "ivpn": {
+   "brand": "IVPN",
+   "organisations": [
+    {
+     "handle": "ORG-IL917-RIPE",
+     "name": "IVPN Limited"
+    },
+    {
+     "handle": "ORG-IL927-RIPE",
+     "name": "IVPN Limited"
+    }
+   ]
+  },
+  "mullvad": {
+   "brand": "Mullvad",
+   "organisations": [
+    {
+     "handle": "ORG-MA2381-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA18-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA19-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA20-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA21-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA22-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA24-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA25-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA26-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA27-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA29-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA30-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA31-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA32-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA33-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA34-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA35-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA36-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA37-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA38-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA39-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA40-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA41-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA42-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA43-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA44-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA45-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA46-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA47-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA48-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA49-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA50-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA51-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA52-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA54-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA55-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA56-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA57-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA58-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA59-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA60-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA61-RIPE",
+     "name": "Mullvad VPN AB"
+    },
+    {
+     "handle": "ORG-MVA62-RIPE",
+     "name": "Mullvad VPN AB"
+    }
+   ]
+  },
+  "mullvad-31173": {
+   "brand": "Mullvad (31173 Services)",
+   "organisations": [
+    {
+     "handle": "ORG-SA1601-RIPE",
+     "name": "31173 Services AB"
+    },
+    {
+     "handle": "ORG-SD248-RIPE",
+     "name": "31173 Services Denmark"
+    },
+    {
+     "handle": "ORG-SF182-RIPE",
+     "name": "31173 Services France"
+    },
+    {
+     "handle": "ORG-SG351-RIPE",
+     "name": "31173 Services Germany"
+    },
+    {
+     "handle": "ORG-SN336-RIPE",
+     "name": "31173 Services Netherlands"
+    },
+    {
+     "handle": "ORG-SS1087-RIPE",
+     "name": "31173 Services Switzerland"
+    },
+    {
+     "handle": "ORG-SUK2-RIPE",
+     "name": "31173 Services United Kingdom"
+    }
+   ]
+  },
+  "nordvpn": {
+   "brand": "NordVPN, Surfshark infrastructure of Nord Security",
+   "organisations": [
+    {
+     "handle": "ORG-PA1516-RIPE",
+     "name": "Packethub"
+    },
+    {
+     "handle": "ORG-PS408-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-PS409-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-PS414-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-PS422-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-PS433-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-PS437-RIPE",
+     "name": "Packethub SA"
+    },
+    {
+     "handle": "ORG-PS448-RIPE",
+     "name": "PacketHub S.A."
+    },
+    {
+     "handle": "ORG-PS462-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-PS526-RIPE",
+     "name": "Packethub S.A."
+    },
+    {
+     "handle": "ORG-TSA138-RIPE",
+     "name": "PacketHub SA"
+    }
+   ]
+  },
+  "ovpn": {
+   "brand": "OVPN",
+   "organisations": [
+    {
+     "handle": "ORG-OIA16-RIPE",
+     "name": "OVPN Integritet AB"
+    }
+   ]
+  },
+  "purevpn": {
+   "brand": "PureVPN",
+   "organisations": [
+    {
+     "handle": "ORG-GSL10-RIPE",
+     "name": "GZ Systems Ltd"
+    },
+    {
+     "handle": "ORG-GSL28-RIPE",
+     "name": "GZ Systems Limited"
+    },
+    {
+     "handle": "ORG-GSL34-RIPE",
+     "name": "GZ Systems Limited"
+    },
+    {
+     "handle": "ORG-GSL39-RIPE",
+     "name": "GZ Systems Limited"
+    },
+    {
+     "handle": "ORG-GSLD1-RIPE",
+     "name": "GZ Systems Ltd d/b/a Purevpn.com"
+    }
+   ]
+  },
+  "strongvpn": {
+   "brand": "StrongVPN, IPVanish",
+   "organisations": [
+    {
+     "handle": "ORG-STL82-RIPE",
+     "name": "Strong Technology, LLC"
+    }
+   ]
+  },
+  "surfshark": {
+   "brand": "Surfshark",
+   "organisations": [
+    {
+     "handle": "ORG-CS741-RIPE",
+     "name": "Cyberzone S.A."
+    },
+    {
+     "handle": "ORG-CS754-RIPE",
+     "name": "Cyberzone S.A."
+    },
+    {
+     "handle": "ORG-CS755-RIPE",
+     "name": "Cyberzone S.A."
+    },
+    {
+     "handle": "ORG-CS758-RIPE",
+     "name": "Cyberzone S.A."
+    },
+    {
+     "handle": "ORG-CS759-RIPE",
+     "name": "Cyberzone S.A."
+    },
+    {
+     "handle": "ORG-CS768-RIPE",
+     "name": "Cyberzone S.A."
+    }
+   ]
+  },
+  "torguard": {
+   "brand": "TorGuard",
+   "organisations": [
+    {
+     "handle": "ORG-VLVL7-RIPE",
+     "name": "VPNetworks LLC VPNetworks LLC"
+    }
+   ]
+  }
+ }
+}

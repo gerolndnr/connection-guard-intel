@@ -30,7 +30,8 @@ def collect(sources, attempts=3):
         status, error, got = 'ok', None, []
         for attempt in range(attempts):
             try:
-                got = s.parse(fetch(s.url, headers=s.headers))
+                # A dns: source tries host names itself and fetches nothing first.
+                got = s.parse(b'' if s.url.startswith('dns:') else fetch(s.url, headers=s.headers))
                 break
             except Exception as e:  # noqa: BLE001 - reported per source
                 error = f'{type(e).__name__}: {str(e)[:160]}'
@@ -107,6 +108,31 @@ def dense_hosting(entries, min_operators=DENSE_ASN_MIN_OPERATORS, exclude=DENSE_
         operators[asn] = sorted({e.source for e in servers if e.network in index})
     dense = {asn: ops for asn, ops in operators.items() if len(ops) >= min_operators and asn not in exclude}
     return [Entry(n, VPN, f'dense-asn-{asn}', 'vpn-dense-asn') for asn in dense for n in by_asn[asn]], dense
+
+
+# Methods whose networks come from a registration or an address plan rather than a seen server: outside the hosting
+# ranges, their reverse DNS is checked for consumer-line names (intel/rdns.py).
+RDNS_GUARDED = ('registry', 'geofeed')
+
+
+def rdns_guard(entries, resolve=None):
+    """Drops the /24s of guarded VPN entries outside every hosting range whose sampled addresses carry consumer
+    names. Returns the entries and a report for the manifest."""
+    from . import rdns
+    hosting = _Index(e.network for e in entries if e.category == HOSTING and e.network.version == 4)
+    guarded = [e for e in entries if e.category == VPN and e.method in RDNS_GUARDED and e.network.version == 4
+               and e.network not in hosting]
+    if not guarded:
+        return entries, dict(checked=0, dropped=[])
+    kept, dropped = rdns.guard(sorted({e.network for e in guarded}), resolve=resolve)
+    if not dropped:
+        return entries, dict(checked=len(guarded), dropped=[])
+    bad, skip = set(dropped), set(guarded)
+    out = [e for e in entries if e not in skip]
+    for e in guarded:
+        units = list(e.network.subnets(new_prefix=24)) if e.network.prefixlen < 24 else [e.network]
+        out += [Entry(u, e.category, e.source, e.method) for u in units if u not in bad]
+    return out, dict(checked=len(guarded), dropped=sorted(str(n) for n in bad)[:200])
 
 
 def lists(entries, dense_min=DENSE_ASN_MIN_OPERATORS):
@@ -265,6 +291,7 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     now = now or datetime.datetime.now(datetime.timezone.utc)
     as_of = now.strftime('%Y-%m-%dT%H:%M:%SZ')
     entries, report = collect(sources)
+    entries, guarded = rdns_guard(entries)
     os.makedirs(out, exist_ok=True)
     os.makedirs(state or 'state', exist_ok=True)
     entries, kept = with_history(entries, os.path.join(state or 'state', 'vpn-history.json'), now)
@@ -283,7 +310,7 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=report, warnings=warnings, lists={},
                     additional_lists={},
                     proxy=dict(min_lists=PROXY_MIN_LISTS, history_days=PROXY_HISTORY_DAYS, addresses_from_history=proxies_from_history),
-                    vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
+                    rdns_guard=guarded, vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
                     tor_addresses_from_history=tor_kept, tor_history_days=TOR_HISTORY_DAYS,
                     inference=dict(min_hits_24=MIN_HITS_24, min_24s_per_22=MIN_24S_PER_22, dense_asn_min_operators=dense_min,
                                    dense_asns={str(k): v for k, v in sorted(dense.items())}))

@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 
+from . import hostnames, registry
 from .model import BOOSTER, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, net
 
 
@@ -413,6 +414,18 @@ VPN_OPERATOR_ASNS = {
 }
 
 
+VPN_GEOFEEDS = {
+    'geofeed-surfshark': ('https://geofeeds.cyberzonehub.com/geofeed.csv',
+                          'RFC 8805 geofeed of Cyberzone S.A. (Surfshark), named in its RIPE objects; self-published.'),
+}
+
+
+def parse_vpn_geofeed(source):
+    def parse(body):
+        return [Entry(n, VPN, source, 'geofeed') for n, _ in registry.feed_rows(body)]
+    return parse
+
+
 def parse_operator_asn(source):
     def parse(body):
         return [Entry(n, VPN, source, 'operator-asn') for n in
@@ -489,4 +502,24 @@ SOURCES = [
     # Evaluation only until the benchmark shows its false-positive rate (plan, phase 5).
     Source('network-signals', SHARED, SIGNALS_URL, parse_signals,
            'Connection Guard network signals: prefixes and counts only, from at least 3 sources.', False, optional=True),
+] + [
+    # Blocks registered in the RIPE Database to the VPN operators' own companies (intel/registry-orgs.json, reviewed).
+    # Evaluation only: the RIPE Database terms allow no re-publication of more than an insubstantial part without the
+    # RIPE NCC's permission (SOURCES.md), so this waits for the owner's decision.
+    Source(f'registry-{op}', VPN, registry.org_url(v['organisations'][0]['handle']),
+           registry.parse_registry(f'registry-{op}', [o['handle'] for o in v['organisations']]),
+           f"RIPE Database, organisations of {v['brand']}; RIPE Database terms, attribution.", False,
+           headers={'Accept': 'application/json'}, optional=True)
+    for op, v in registry.load_orgs().items() if v['organisations']
+] + [
+    # RFC 8805 geofeeds that operators publish on their own domain and name in their RIPE objects: the operator's
+    # address plan, every row a VPN network. Self-published for public consumption, as the hosting geofeeds above.
+    Source(sid, VPN, url, parse_vpn_geofeed(sid), terms, True, optional=True)
+    for sid, (url, terms) in VPN_GEOFEEDS.items()
+] + [
+    # Server names tried in DNS after the operator's naming scheme (intel/hostnames.py); no list is fetched.
+    # Evaluation only: on 25 Oct 2026 Proton's scheme gave 1,291 addresses, of which gluetun and Proton's networks
+    # already had 1,139, for about 27,000 queries. The time split shows whether it is earlier than gluetun.
+    Source(sid, VPN, 'dns:' + template, hostnames.parse_scheme(sid, template), terms, False, optional=True)
+    for sid, (template, _, terms) in hostnames.SCHEMES.items()
 ]
