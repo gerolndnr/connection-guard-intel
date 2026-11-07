@@ -1,5 +1,6 @@
 """Offline tests: parsers on recorded formats (documentation addresses), classification rules, build guards, signing."""
 import base64
+import contextlib
 import datetime
 import io
 import ipaddress
@@ -269,6 +270,42 @@ class Guards(unittest.TestCase):
                 self.assertFalse(os.path.exists(os.path.join(d, 'dist', 'vpn-history.json')))
         finally:
             build.fetch = orig
+
+
+class FailedSources(unittest.TestCase):
+    """Which failed sources stop the lists, and when one that a history covers raises an alert."""
+    def run_main(self, d, report):
+        orig = build.build
+        build.build = lambda *args, **kw: dict(sources=report, lists={}, additional_lists={})
+        try:
+            build.main(['--out', os.path.join(d, 'dist'), '--state', d, '--alerts', os.path.join(d, 'alerts.txt')])
+        finally:
+            build.build = orig
+        with open(os.path.join(d, 'alerts.txt')) as f:
+            return f.read()
+
+    def source(self, sid, category, status='failed', optional=False):
+        return dict(id=sid, category=category, status=status, error='HTTPError: HTTP Error 403: Forbidden', entries=0, optional=optional)
+
+    def test_a_vpn_operator_or_tor_failure_publishes_and_alerts_after_three_builds(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+            report = [self.source('worldvpn', VPN), self.source('tor-bulk-exit-list', TOR), self.source('ipvanish', VPN, optional=True)]
+            self.assertEqual(self.run_main(d, report), '')
+            self.assertEqual(self.run_main(d, report), '')
+            alerts = self.run_main(d, report)
+            self.assertIn('worldvpn failed in 3 builds in a row', alerts)
+            self.assertIn('tor-bulk-exit-list', alerts)
+            self.assertNotIn('ipvanish', alerts)  # optional: never an alert
+            # Answering again starts the count over.
+            self.assertEqual(self.run_main(d, [self.source('worldvpn', VPN, status='ok'), self.source('tor-bulk-exit-list', TOR, status='ok')]), '')
+            self.assertEqual(self.run_main(d, [self.source('worldvpn', VPN)]), '')
+
+    def test_a_source_without_history_stops_the_lists(self):
+        for sid, category in (('aws', HOSTING), ('icloud-private-relay', RELAY), ('operator-asn-9009', VPN)):
+            with self.subTest(sid), tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as stop:
+                    self.run_main(d, [self.source(sid, category)])
+                self.assertEqual(stop.exception.code, 2)
 
 
 class Proxies(unittest.TestCase):

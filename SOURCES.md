@@ -20,6 +20,7 @@ Each source is fetched without a key. `redistribute` (in `intel/sources.py`) say
 | AirVPN status API | VPN | Public status API, no licence text | yes (owner decision, 6 Oct 2026; added 7 Oct) |
 | Windscribe server list | VPN | Public list used by its apps, no licence text | yes (added 7 Oct 2026) |
 | IPVanish OpenVPN configuration archive (host names, resolved by DNS) | VPN | Public download, no licence text | yes (added 7 Oct 2026) |
+| IPVanish via gluetun-servers (`pkg/servers/ipvanish.json`), because IPVanish answers GitHub's build runners with 403 | VPN | MIT licence (gluetun) | yes (added 7 Nov 2026). Measured on 7 Nov: 1,873 addresses, 1,861 of them also in the archive's 3,597 |
 | PrivadoVPN OpenVPN configuration archive (host names, resolved by DNS) | VPN | Public download, no licence text | yes (added 7 Oct 2026) |
 | OVPN server API | VPN | Public API used by its apps, no licence text | yes (added 7 Oct 2026) |
 | AzireVPN locations (pool host names, resolved by DNS) | VPN | Public API, no licence text | yes (added 7 Oct 2026) |

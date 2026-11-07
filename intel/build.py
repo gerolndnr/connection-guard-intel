@@ -221,6 +221,29 @@ def with_history(entries, path, now, category=VPN, days=HISTORY_DAYS):
     return list(entries) + old, len(old)
 
 
+# A failed source whose addresses a history keeps (published VPN servers 14 days, Tor exits 3 days) loses nothing at
+# once, so it does not stop the lists. It raises an alert after ALERT_BUILDS failed builds in a row, well before its
+# history runs out. Any other failed source (relay and hosting ranges, VPN operators' announced prefixes) would drop
+# its networks from the lists, so the lists are not published.
+ALERT_BUILDS = 3
+
+
+def kept_by_history(r):
+    return r['category'] in (VPN, TOR) and not r['id'].startswith('operator-asn-')
+
+
+def failure_streaks(report, path):
+    """Failed builds in a row per source, kept in the state; a source that answers again starts over."""
+    streaks = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            streaks = json.load(f)
+    streaks = {r['id']: streaks.get(r['id'], 0) + 1 for r in report if r['status'] != 'ok'}
+    with open(path, 'w') as f:
+        json.dump(streaks, f, sort_keys=True)
+    return streaks
+
+
 # Open proxies (evaluated 7 October 2026 on the benchmark's 692 addresses, see README): an address counts when lists of
 # at least two different maintainers name it on the same day, and stays for 7 days after that. Proxies often sit on
 # home connections whose address changes, so the history is half the VPN history. An address inside a RELAY range
@@ -320,6 +343,7 @@ def main(argv=None):
     p.add_argument('--force', action='store_true', help='publish even if a list shrank by more than 20 %%')
     p.add_argument('--dense-asn', type=int, default=DENSE_ASN_MIN_OPERATORS,
                    help='mark whole hosting ASNs with at least this many VPN operators as VPN (default: %(default)s)')
+    p.add_argument('--alerts', help='file for sources that kept failing; written after the lists, so they are still published')
     a = p.parse_args(argv)
     m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn)
     for r in m['sources']:
@@ -327,12 +351,21 @@ def main(argv=None):
     for c, l in {**m['lists'], **m.get('additional_lists', {})}.items():
         print(f"{c:8} {l['networks']:>7} networks {l['addresses']:>14,} addresses {l['bytes']/1e6:5.2f} MB")
     failed = [r for r in m['sources'] if r['status'] != 'ok']
+    streaks = failure_streaks(m['sources'], os.path.join(a.state or 'state', 'source-failures.json'))
+    alerts = []
     for r in failed:
         if r.get('optional'):
             print(f"warning: optional source {r['id']} {r['status']}; its last addresses stay for {HISTORY_DAYS} days")
-    if any(not r.get('optional') for r in failed):
+        elif kept_by_history(r):
+            days = HISTORY_DAYS if r['category'] == VPN else TOR_HISTORY_DAYS
+            print(f"warning: source {r['id']} {r['status']} ({streaks[r['id']]} builds in a row); its last addresses stay for {days} days")
+            if streaks[r['id']] >= ALERT_BUILDS:
+                alerts.append(f"{r['id']} {r['status']} in {streaks[r['id']]} builds in a row: {r['error']}")
+    if any(not r.get('optional') and not kept_by_history(r) for r in failed):
         sys.exit(2)
-
+    if a.alerts:
+        with open(a.alerts, 'w') as f:
+            f.writelines(line + '\n' for line in alerts)
 
 if __name__ == '__main__':
     main()
