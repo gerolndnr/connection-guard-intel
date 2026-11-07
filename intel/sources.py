@@ -463,6 +463,10 @@ SOURCES = [
            'Public server list used by its apps, no licence text.', True),
     Source('ipvanish', VPN, 'https://configs.ipvanish.com/configs/configs.zip', openvpn_zip('ipvanish'),
            'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True, optional=True),
+    # IPVanish answers GitHub's runners with 403 (every build since 7 October 2026), so the gluetun copy of its server
+    # list stands in: about half the addresses of the archive (1,873 of 3,597 on 7 Nov 2026), nearly all of them shared.
+    Source('ipvanish-gluetun', VPN, GLUETUN + 'ipvanish.json', parse_gluetun('ipvanish-gluetun'),
+           'gluetun-servers (MIT licence, github.com/qdm12/gluetun-servers); host names resolved by DNS.', True, optional=True),
     Source('privadovpn', VPN, 'https://privadovpn.com/apps/ovpn_configs.zip', openvpn_zip('privadovpn'),
            'Public OpenVPN configuration archive (host names, resolved by DNS), no licence text.', True),
     Source('ovpn', VPN, 'https://www.ovpn.com/v2/api/client/entry', parse_ovpn, 'Public server API used by its apps, no licence text.', True),

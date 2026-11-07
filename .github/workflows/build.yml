@@ -14,12 +14,17 @@ jobs:
       - run: pip install cryptography==45.0.7
       - run: python -m unittest discover -s tests -v
       # The 14-day VPN history is kept between runs; it is never published.
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         with: { path: state, key: "intel-state-${{ github.run_id }}", restore-keys: intel-state- }
       - name: Build
+        id: build
         if: github.event_name != 'push'
         env: { INTEL_SIGNING_KEY: "${{ secrets.INTEL_SIGNING_KEY }}" }
-        run: python -m intel.build --out dist --state state
+        run: python -m intel.build --out dist --state state --alerts "$RUNNER_TEMP/alerts.txt"
+      # Saved right after the build, also when a later step fails: the histories and failure counts are true either way.
+      - uses: actions/cache/save@v4
+        if: always() && steps.build.outcome != 'skipped' && steps.build.outcome != 'cancelled'
+        with: { path: state, key: "intel-state-${{ github.run_id }}" }
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'push'
         with: { name: lists, path: dist }
@@ -31,4 +36,17 @@ jobs:
           git init -q -b lists
           git -c user.name="intel build" -c user.email="actions@users.noreply.github.com" add -A
           git -c user.name="intel build" -c user.email="actions@users.noreply.github.com" commit -q -m "Lists as of $(python -c 'import json;print(json.load(open("manifest.json"))["as_of"])')"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" lists
+          # GitHub refuses a push now and then ("fatal error in commit_refs_rules", 4 Nov 2026); try three times.
+          for attempt in 1 2 3; do
+            git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" lists && exit 0
+            sleep $((attempt * 20))
+          done
+          exit 1
+      # After publishing: a source with a history that keeps failing fails the run, so the owner hears of it in time.
+      - name: Sources that keep failing
+        if: github.event_name != 'push'
+        run: |
+          if [ -s "$RUNNER_TEMP/alerts.txt" ]; then
+            while read -r line; do echo "::error::$line"; done < "$RUNNER_TEMP/alerts.txt"
+            exit 1
+          fi
