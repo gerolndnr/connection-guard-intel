@@ -239,7 +239,40 @@ class Guards(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build.check_shrink(previous, {VPN: 700}, force=False)
         self.assertEqual(build.check_shrink(previous, {VPN: 700}, force=True), ['VPN: 1000 -> 700 networks'])
-        self.assertEqual(build.check_shrink(previous, {VPN: 900}, force=False), [])
+        self.assertEqual(build.check_shrink(previous, {VPN: 800}, force=False), [])
+
+    def test_fresh_output_compares_with_explicit_published_manifest(self):
+        with tempfile.TemporaryDirectory() as d:
+            out, state, previous = (os.path.join(d, name) for name in ('dist', 'state', 'previous.json'))
+            baseline = dict(evaluation_only=False, lists={c: dict(networks=0) for c in build.CATEGORIES})
+            baseline['lists'][TOR]['networks'] = 2
+            with open(previous, 'w') as f:
+                json.dump(baseline, f)
+            src = [sources.Source('tor', TOR, 'mem://tor', lambda b: sources.parse_tor(b'185.220.101.1\n'), 't', True)]
+            orig = build.fetch
+            build.fetch = lambda url, headers=None: b''
+            try:
+                with self.assertRaisesRegex(SystemExit, 'TOR: 2 -> 1 networks'):
+                    build.build(out, sources=src, state=state, previous_manifest=previous)
+                self.assertFalse(os.path.exists(os.path.join(out, 'manifest.json')))
+                m = build.build(out, sources=src, state=state, previous_manifest=previous, force=True)
+                self.assertEqual(m['warnings'], ['TOR: 2 -> 1 networks'])
+            finally:
+                build.fetch = orig
+
+    def test_invalid_explicit_baseline_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            previous = os.path.join(d, 'previous.json')
+            cases = [{}, dict(lists={c: dict(networks=0) for c in build.CATEGORIES}, evaluation_only=True),
+                     dict(lists={c: dict(networks=True) for c in build.CATEGORIES}, evaluation_only=False)]
+            for baseline in cases:
+                with self.subTest(baseline=baseline):
+                    with open(previous, 'w') as f:
+                        json.dump(baseline, f)
+                    with self.assertRaisesRegex(SystemExit, 'previous manifest must be a published manifest'):
+                        build.build(d, previous_manifest=previous, force=True)
+            with self.assertRaises(FileNotFoundError):
+                build.build(d, previous_manifest=previous + '.missing')
 
     def test_render_is_the_plugin_list_format(self):
         body = build.render(TOR, [ipaddress.ip_network('185.220.101.1/32'), ipaddress.ip_network('185.220.100.0/24')],

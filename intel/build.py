@@ -283,7 +283,21 @@ def proxy_networks(entries, groups, relay, path, now):
     return v4 + v6, len(set(history) - {str(n) for n in agreed})
 
 
-def build(out, include_all=False, force=False, sources=None, key_pem=None, now=None, state=None, dense_min=DENSE_ASN_MIN_OPERATORS):
+def build(out, include_all=False, force=False, sources=None, key_pem=None, now=None, state=None,
+          dense_min=DENSE_ASN_MIN_OPERATORS, previous_manifest=None):
+    previous = None
+    baseline = previous_manifest if previous_manifest is not None else os.path.join(out, 'manifest.json')
+    if previous_manifest is not None or os.path.exists(baseline):
+        with open(baseline) as f:
+            previous = json.load(f)
+    if previous_manifest is not None:
+        lists_meta = previous.get('lists') if isinstance(previous, dict) else None
+        if (not isinstance(lists_meta, dict) or set(lists_meta) != set(CATEGORIES)
+                or previous.get('evaluation_only') is not False
+                or any(not isinstance(meta, dict) or type(meta.get('networks')) is not int or meta['networks'] < 0
+                       for meta in lists_meta.values())):
+            raise SystemExit('previous manifest must be a published manifest with all four network counts')
+
     sources = [s for s in (sources or SOURCES) if include_all or s.redistribute]
     now = now or datetime.datetime.now(datetime.timezone.utc)
     as_of = now.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -295,10 +309,6 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     result = lists(entries, dense_min)
     result[VPN] = without_boosters(entries, result[VPN])
     _, dense = dense_hosting(entries, dense_min)
-    previous = None
-    if os.path.exists(os.path.join(out, 'manifest.json')):
-        with open(os.path.join(out, 'manifest.json')) as f:
-            previous = json.load(f)
     counts = {c: len(n) for c, n in result.items()}
     warnings = check_shrink(previous, counts, force)
     groups = {s.id: s.group for s in sources if s.group}
@@ -338,6 +348,7 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument('--out', default='dist')
+    p.add_argument('--previous-manifest', help='compare with this published manifest instead of the one in --out')
     p.add_argument('--all', action='store_true', help='include sources not cleared for redistribution (evaluation only)')
     p.add_argument('--state', help='directory for vpn-history.json, kept between builds and never published (default: state)')
     p.add_argument('--force', action='store_true', help='publish even if a list shrank by more than 20 %%')
@@ -345,7 +356,8 @@ def main(argv=None):
                    help='mark whole hosting ASNs with at least this many VPN operators as VPN (default: %(default)s)')
     p.add_argument('--alerts', help='file for sources that kept failing; written after the lists, so they are still published')
     a = p.parse_args(argv)
-    m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn)
+    m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn,
+              previous_manifest=a.previous_manifest)
     for r in m['sources']:
         print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r['error'] else ''))
     for c, l in {**m['lists'], **m.get('additional_lists', {})}.items():

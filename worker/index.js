@@ -6,7 +6,12 @@
 // The plugin verifies manifest.json.sig and every list's sha256 itself; this Worker only delivers bytes.
 const ORIGIN = "https://raw.githubusercontent.com/gerolndnr/connection-guard-intel/lists/";
 const TEXT = "text/plain; charset=utf-8";
-const LISTS = new Map([["vpn.txt", "VPN"], ["tor.txt", "TOR"], ["relay.txt", "RELAY"], ["hosting.txt", "HOSTING"], ["proxy.txt", "PROXY"]]);
+const LISTS = new Map([
+  ["vpn.txt", ["lists", "VPN"]], ["tor.txt", ["lists", "TOR"]],
+  ["relay.txt", ["lists", "RELAY"]], ["hosting.txt", ["lists", "HOSTING"]],
+  ["proxy.txt", ["additional_lists", "PROXY"]],
+  ["booster.txt", ["additional_lists", "BOOSTER"]], ["mobile.txt", ["additional_lists", "MOBILE"]],
+]); // SHARED remains evaluation-only.
 const META = new Map([["manifest.json", "application/json"], ["manifest.json.sig", TEXT]]);
 const HEADERS = { "x-robots-tag": "noindex", "access-control-allow-origin": "*" };
 
@@ -33,9 +38,10 @@ const hex = (buffer) => [...new Uint8Array(buffer)].map((b) => b.toString(16).pa
 async function list(name, ctx) {
   const manifest = await meta("manifest.json", ctx);
   if (!manifest.ok) return manifest;
-  // PROXY sits in `additional_lists`, which Connection Guard 0.6.0 ignores (it accepts exactly four `lists`).
+  // Optional routes use `additional_lists` without changing the four-list contract of older clients.
   const parsed = await manifest.clone().json();
-  const sha = (parsed.lists?.[LISTS.get(name)] ?? parsed.additional_lists?.[LISTS.get(name)])?.sha256;
+  const [group, category] = LISTS.get(name);
+  const sha = parsed[group]?.[category]?.sha256;
   if (!/^[0-9a-f]{64}$/.test(sha ?? "")) return new Response("lists temporarily unavailable\n", { status: 502 });
   // Keyed by content hash, so a cached copy never outlives its manifest; the query also skips stale CDN copies.
   return cached(`${ORIGIN}${name}?sha256=${sha}`, async () => {
@@ -54,7 +60,7 @@ export default {
     if (request.method !== "GET" && request.method !== "HEAD") return new Response("method not allowed\n", { status: 405 });
     const name = new URL(request.url).pathname.slice(1);
     if (name === "") {
-      return new Response("Connection Guard Intel lists: vpn.txt, tor.txt, relay.txt, hosting.txt, proxy.txt, manifest.json, manifest.json.sig\n" +
+      return new Response(`Connection Guard Intel lists: ${[...LISTS.keys(), ...META.keys()].join(", ")}\n` +
         "Source and terms: https://github.com/gerolndnr/connection-guard-intel\n", { headers: { "content-type": TEXT } });
     }
     let response;
