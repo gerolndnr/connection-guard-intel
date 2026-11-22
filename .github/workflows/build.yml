@@ -2,25 +2,51 @@ name: build
 on:
   schedule: [{ cron: '17 3 * * *' }]
   workflow_dispatch:
+    inputs:
+      allow_shrink:
+        description: 'Allow a reviewed drop of more than 20% in a main list'
+        type: boolean
+        default: false
   push: { branches: [main] }
 permissions: { contents: write }
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: intel-${{ github.event_name == 'push' && 'test' || 'publish' }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
       - run: pip install cryptography==45.0.7
       - run: python -m unittest discover -s tests -v
+      - run: node --test tests/worker.test.mjs
+      - name: Read the last published baseline
+        id: baseline
+        if: github.event_name != 'push'
+        run: |
+          git fetch --no-tags --depth=1 origin refs/heads/lists
+          git show FETCH_HEAD:manifest.json > "$RUNNER_TEMP/previous-manifest.json"
+          echo "commit=$(git rev-parse FETCH_HEAD)" >> "$GITHUB_OUTPUT"
       # The 14-day VPN history is kept between runs; it is never published.
       - uses: actions/cache/restore@v4
         with: { path: state, key: "intel-state-${{ github.run_id }}", restore-keys: intel-state- }
       - name: Build
         id: build
         if: github.event_name != 'push'
-        env: { INTEL_SIGNING_KEY: "${{ secrets.INTEL_SIGNING_KEY }}" }
-        run: python -m intel.build --out dist --state state --alerts "$RUNNER_TEMP/alerts.txt"
+        env:
+          INTEL_SIGNING_KEY: ${{ secrets.INTEL_SIGNING_KEY }}
+          ALLOW_SHRINK: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_shrink }}
+        run: |
+          : "${INTEL_SIGNING_KEY:?INTEL_SIGNING_KEY is required to publish}"
+          flags=()
+          if [ "$ALLOW_SHRINK" = true ]; then flags+=(--force); fi
+          python -m intel.build --out dist --state state --alerts "$RUNNER_TEMP/alerts.txt" \
+            --previous-manifest "$RUNNER_TEMP/previous-manifest.json" "${flags[@]}"
       # Saved right after the build, also when a later step fails: the histories and failure counts are true either way.
       - uses: actions/cache/save@v4
         if: always() && steps.build.outcome != 'skipped' && steps.build.outcome != 'cancelled'
@@ -31,6 +57,8 @@ jobs:
       # intel.connectionguard.net serves the branch `lists`, which holds exactly one commit: the latest build.
       - name: Publish to the lists branch
         if: github.event_name != 'push'
+        env:
+          BASELINE_COMMIT: ${{ steps.baseline.outputs.commit }}
         run: |
           cd dist
           git init -q -b lists
@@ -38,7 +66,8 @@ jobs:
           git -c user.name="intel build" -c user.email="actions@users.noreply.github.com" commit -q -m "Lists as of $(python -c 'import json;print(json.load(open("manifest.json"))["as_of"])')"
           # GitHub refuses a push now and then ("fatal error in commit_refs_rules", 4 Nov 2026); try three times.
           for attempt in 1 2 3; do
-            git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" lists && exit 0
+            git push -q "--force-with-lease=refs/heads/lists:$BASELINE_COMMIT" \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" lists && exit 0
             sleep $((attempt * 20))
           done
           exit 1

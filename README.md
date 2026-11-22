@@ -13,7 +13,7 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 | `mobile.txt` | Mobile carriers behind carrier-grade NAT: a label. Many players share one address, so `/cg explain` warns that an IP ban or an IP-based alt check hits innocent players there. |
 | `shared.txt` | Exits that many accounts use across several Connection Guard servers (network signals): a review label for alt accounts and residential proxies. Evaluation only until it is measured; not published yet. |
 
-`proxy.txt` and the three labels are listed in `manifest.json` under `additional_lists`, which Connection Guard 0.6.0 ignores; 0.6.1 reads only the proxy list.
+`proxy.txt` and the published labels are listed in `manifest.json` under `additional_lists`, which Connection Guard 0.6.0 ignores; 0.6.1 reads only the proxy list.
 
 An address that is on no list is **unknown**, not clean. Connection Guard then asks its next detection service.
 
@@ -29,6 +29,7 @@ Lists: `https://intel.connectionguard.net/{vpn,tor,relay,hosting,proxy,booster,m
 python -m intel.build --out dist          # published lists: only sources cleared in SOURCES.md
 python -m intel.build --out eval --all    # every source, for evaluation only
 python -m unittest discover -s tests
+node --test tests/worker.test.mjs
 ```
 
 The pipeline:
@@ -45,7 +46,7 @@ The pipeline:
    - Tor exits: 3 days, from the Tor Project's CollecTor snapshots from the first build on.
 5. Takes a proxy only when lists of two different maintainers name it, and never lists an address inside a relay range.
 6. Refuses to publish:
-   - when one of the four main lists shrinks by more than 20 %;
+   - when one of the four main lists shrinks by more than 20 % in network count compared with the last published manifest (scheduled and manual builds; `allow_shrink` is a manual override for a reviewed change);
    - when `lists` holds anything but VPN, TOR, RELAY and HOSTING;
    - when `manifest.json` exceeds 60,000 bytes.
 
