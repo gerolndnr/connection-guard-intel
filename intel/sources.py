@@ -125,8 +125,13 @@ def proxy_source(sid, group, url, terms, redistribute):
 GH = 'https://raw.githubusercontent.com/'
 # Public open-proxy lists, reviewed 7 October 2026. Every list is published, whatever its licence (owner decision,
 # 7 October 2026, as for the VPN operator lists); the terms column keeps each list's licence on record.
-# The benchmark's proxy cohort comes from monosans, proxifly and vakhov, so those three are deliberately not used.
+# monosans and proxifly (added 27 November 2026) re-check the proxies they list and are what bot tools load; they
+# were left out before only because mc-antivpn-bench builds its proxy cohort from them. Product quality comes first
+# (owner decision); the benchmark reports the overlap instead. vakhov stays out: its lists have not changed since
+# February 2026.
 PROXY_SOURCES = [
+    proxy_source('proxy-monosans', 'monosans', GH + 'monosans/proxy-list/main/proxies/all.txt', 'MIT licence (monosans/proxy-list).', True),
+    proxy_source('proxy-proxifly', 'proxifly', GH + 'proxifly/free-proxy-list/main/proxies/all/data.txt', 'GPL-3.0 (proxifly/free-proxy-list).', True),
     proxy_source('proxy-jetkai', 'jetkai', GH + 'jetkai/proxy-list/main/online-proxies/txt/proxies.txt', 'MIT licence (jetkai/proxy-list).', True),
     proxy_source('proxy-clarketm', 'clarketm', GH + 'clarketm/proxy-list/master/proxy-list-raw.txt', 'MIT licence (clarketm/proxy-list).', True),
     proxy_source('proxy-sunny9577', 'sunny9577', GH + 'sunny9577/proxy-scraper/master/proxies.txt', 'MIT licence (sunny9577/proxy-scraper).', True),

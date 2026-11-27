@@ -77,6 +77,8 @@ The rules were chosen by leaving each of the 14 operators out of the build in tu
 
 | List | Licence | Published |
 | --- | --- | --- |
+| monosans/proxy-list | MIT | yes (added 27 Nov 2026) |
+| proxifly/free-proxy-list | GPL-3.0 | yes (added 27 Nov 2026, owner decision) |
 | jetkai/proxy-list | MIT | yes |
 | clarketm/proxy-list | MIT | yes |
 | sunny9577/proxy-scraper | MIT | yes |
@@ -87,5 +89,5 @@ The rules were chosen by leaving each of the 14 operators out of the build in tu
 
 With the MIT lists alone, 4,590 addresses met the two-maintainer rule on 7 October 2026, because most addresses come from one maintainer (ErcinDedeoglu). With all twelve maintainers, 31,905 did, and the benchmark's proxy cohort went from 17 to 68 of 100 listed, with no home or mobile address listed.
 
-monosans, proxifly and vakhov are not used: mc-antivpn-bench builds its proxy cohort from them, so using them would only measure coverage.
+monosans and proxifly are used since 27 November 2026. Until then they were left out because mc-antivpn-bench builds its proxy cohort from them (with vakhov), so Intel's proxy coverage on that cohort was not circular. The owner decided that product quality comes first: these are checked lists and among the ones bot tools load. Since then Intel's result on the benchmark's proxy cohort is circular, and the benchmark says so. vakhov is not used because its lists have not changed since February 2026.
 
