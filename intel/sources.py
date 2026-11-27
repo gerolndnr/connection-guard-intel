@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .model import BOOSTER, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, net
+from .model import BOOSTER, HOSTING, MOBILE, P2P, PROXY, RELAY, SHARED, TOR, VPN, Entry, net
 
 
 @dataclass
@@ -242,11 +242,27 @@ def parse_pia_seen(body, days=14):
 IPAPI_P2P = {'mysterium', 'vpngate', 'urban vpn', 'hola vpn', 'hola'}
 
 
+def _ipapi_rows(body):
+    return re.findall(r'<tr><td>([^<]+)</td><td><a [^>]*>([0-9a-fA-F:.]+)</a></td><td>([^<]*)</td>', body.decode('utf-8', 'replace'))
+
+
 def parse_ipapi_exits(body, days=7):
     """ipapi.is's public table of observed VPN exit nodes (commercial providers only)."""
-    rows = re.findall(r'<tr><td>([^<]+)</td><td><a [^>]*>([0-9a-fA-F:.]+)</a></td><td>([^<]*)</td>', body.decode('utf-8', 'replace'))
-    keep = [(ip, seen) for provider, ip, seen in rows if provider.strip().lower() not in IPAPI_P2P]
+    keep = [(ip, seen) for provider, ip, seen in _ipapi_rows(body) if provider.strip().lower() not in IPAPI_P2P]
     return vpn(_recent(keep, days), 'ipapi-exits')
+
+
+def parse_ipapi_p2p(body, days=3):
+    """The same table's peer-to-peer exits (Mysterium, VPN Gate, Urban VPN, Hola): home connections that rotate, so
+    only the last 3 days, exact addresses only (no /64 around IPv6 exits)."""
+    keep = [(ip, seen) for provider, ip, seen in _ipapi_rows(body) if provider.strip().lower() in IPAPI_P2P]
+    return entries(_recent(keep, days), P2P, 'ipapi-p2p')
+
+
+def parse_vpngate(body):
+    """VPN Gate's public server list (vpngate.net/api/iphone): volunteers' servers that are up right now."""
+    lines = [l for l in body.decode('utf-8', 'replace').splitlines() if l and not l.startswith(('*', '#'))]
+    return entries([r[1] for r in csv.reader(lines) if len(r) > 1], P2P, 'vpngate')
 
 
 def parse_surfshark(body, resolve=None):
@@ -474,6 +490,11 @@ VPN_OPERATOR_ASNS = {
     32751: 'Nuclearfallout Enterprises (Octovpn)', 401401: 'Unredacted (NoiseNet)', 401720: 'Unredacted',
     200373: '3xK Tech', 198571: '3xK Tech (PlainProxies)', 207957: 'SERV.HOST', 397282: 'Castle VPN',
     27683: 'VPN de Mexico', 218908: 'SSS VPN Technical', 208765: 'Bullet Proof VPN', 219329: 'Flash Edge (Flashproxy)',
+    # VPN networks in X4BNet's finished list (it also matches "VPN" in network names) that Intel did not have yet.
+    # Companies whose name merely contains "VPN" (Delta Air Lines' B2B VPN, Nomura's IVPN, Kirkland & Ellis, a police
+    # academy, Comserv PNG, an insurance institute's AOSVPN) and VPNET INC (business unclear) are left out.
+    214879: 'SkyVPN', 214234: 'RoomVPN', 203619: 'IVPN Limited', 209827: 'InfosecVPN', 62635: 'VPNWholesaler (Webistics)',
+    394104: 'IPLockVPN (Westdata)', 60729: 'Torservers.net (Stiftung Erneuerbare Freiheit)',
 }
 
 
@@ -524,6 +545,10 @@ SOURCES = [
            'Lars-/PIA-servers, PIA addresses from its rotating DNS; no licence.', True, optional=True),
     Source('ipapi-exits', VPN, 'https://ipapi.is/vpn-exit-nodes.html', parse_ipapi_exits,
            'ipapi.is public table of observed VPN exits; its terms restrict reuse.', True, optional=True),
+    Source('vpngate', P2P, 'https://www.vpngate.net/api/iphone/', parse_vpngate,
+           'VPN Gate public server list (University of Tsukuba); P2P label.', True, optional=True),
+    Source('ipapi-p2p', P2P, 'https://ipapi.is/vpn-exit-nodes.html', parse_ipapi_p2p,
+           'ipapi.is public table of observed VPN exits, peer-to-peer providers; P2P label.', True, optional=True),
     Source('nym', VPN, 'https://mainnet-node-status-api.nymtech.cc/dvpn/v1/directory/gateways/exit', parse_nym,
            'Public exit-gateway directory used by the NymVPN apps, no licence text.', True, optional=True),
     Source('surfshark', VPN, 'https://api.surfshark.com/v4/server/clusters/generic', parse_surfshark,

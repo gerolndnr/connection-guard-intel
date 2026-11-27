@@ -11,7 +11,7 @@ import unittest
 import zipfile
 
 from intel import build, sources
-from intel.model import BOOSTER, HOSTING, MOBILE, RELAY, SHARED, TOR, VPN, Entry, net
+from intel.model import BOOSTER, HOSTING, MOBILE, P2P, RELAY, SHARED, TOR, VPN, Entry, net
 
 
 def nets(entries):
@@ -77,6 +77,10 @@ class Parsers(unittest.TestCase):
         table = (row.format('ExpressVPN', '2026-11-26 01:39', ip='196.244.192.5') + row.format('Mysterium', '2026-11-26 01:00', ip='89.36.162.71')
                  + row.format('NordVPN', '2026-11-01 10:00', ip='89.35.28.131')).encode()
         self.assertEqual(nets(sources.parse_ipapi_exits(table)), ['196.244.192.5/32'])
+        p2p = sources.parse_ipapi_p2p(table)
+        self.assertEqual([(str(e.network), e.category) for e in p2p], [('89.36.162.71/32', 'P2P')])
+        gate = b'*vpn_servers\n#HostName,IP,Score,Ping\npublic-vpn-1,219.100.37.10,120,3\nlocal,10.0.0.1,1,1\n*\n'
+        self.assertEqual([(str(e.network), e.category, e.source) for e in sources.parse_vpngate(gate)], [('219.100.37.10/32', 'P2P', 'vpngate')])
         ov = json.dumps({'datacenters': [{'servers': [{'ip': '37.120.212.227'}]}]}).encode()
         self.assertEqual(nets(sources.parse_ovpn(ov)), ['37.120.212.227/32'])
         az = json.dumps({'locations': [{'pool': 'ar-bue.azirevpn.net'}]}).encode()
@@ -165,12 +169,14 @@ class Rules(unittest.TestCase):
     def test_label_lists_leave_shared_exits_that_a_relay_or_mobile_network_explains(self):
         entries = [self.e('172.56.0.0/16', MOBILE, 'mobile-asn-21928', 'prefix'), self.e('47.91.122.48/32', BOOSTER, 'mudfish'),
                    self.e('172.56.10.0/24', SHARED, 'network-signals', 'signals'), self.e('104.28.1.0/24', SHARED, 'network-signals', 'signals'),
-                   self.e('198.51.100.0/24', SHARED, 'network-signals', 'signals')]
+                   self.e('198.51.100.0/24', SHARED, 'network-signals', 'signals'), self.e('172.56.20.5/32', P2P, 'vpngate'),
+                   self.e('104.28.2.3/32', P2P, 'ipapi-p2p'), self.e('219.100.37.10/32', P2P, 'vpngate')]
         result = {RELAY: [ipaddress.ip_network('104.28.0.0/16')]}
         labels = build.label_lists(entries, result)
         self.assertEqual([str(n) for n in labels[SHARED]], ['198.51.100.0/24'])
         self.assertEqual([str(n) for n in labels[BOOSTER]], ['47.91.122.48/32'])
         self.assertEqual([str(n) for n in labels[MOBILE]], ['172.56.0.0/16'])
+        self.assertEqual([str(n) for n in labels[P2P]], ['219.100.37.10/32'])
 
     def test_booster_nodes_leave_inferred_vpn_ranges_but_not_published_servers(self):
         vpn = [ipaddress.ip_network('31.171.152.0/22'), ipaddress.ip_network('5.0.0.0/24')]

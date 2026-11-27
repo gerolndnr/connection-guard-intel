@@ -16,7 +16,7 @@ import re
 import sys
 import time
 
-from .model import ADDITIONAL, BOOSTER, CATEGORIES, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, fetch
+from .model import ADDITIONAL, BOOSTER, CATEGORIES, HOSTING, MOBILE, P2P, PROXY, RELAY, SHARED, TOR, VPN, Entry, fetch
 from .sources import SOURCES
 
 LIST_LIMIT = 4 * 1024 * 1024  # the plugin's bound for one decompressed list
@@ -139,11 +139,12 @@ def lists(entries, dense_min=DENSE_ASN_MIN_OPERATORS):
     return out
 
 
-LABELS = (BOOSTER, MOBILE, SHARED)
+LABELS = (BOOSTER, MOBILE, SHARED, P2P)
 
 
 def label_lists(entries, result):
-    """The label lists, collapsed. A shared exit inside a relay or mobile network is already explained by that list."""
+    """The label lists, collapsed. A shared exit inside a relay or mobile network is already explained by that list, and a
+    P2P exit there is left out: blocking a carrier-grade NAT or relay address would hit many other players."""
     from .evaluate import Index
     out = {}
     for category in LABELS:
@@ -152,6 +153,7 @@ def label_lists(entries, result):
             sorted(ipaddress.collapse_addresses(n for n in nets if n.version == 6))
     explained = Index(result[RELAY] + out[MOBILE])
     out[SHARED] = [n for n in out[SHARED] if str(n.network_address) not in explained]
+    out[P2P] = [n for n in out[P2P] if str(n.network_address) not in explained]
     return out
 
 
