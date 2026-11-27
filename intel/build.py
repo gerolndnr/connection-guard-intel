@@ -12,6 +12,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import sys
 import time
 
@@ -19,6 +20,18 @@ from .model import ADDITIONAL, BOOSTER, CATEGORIES, HOSTING, MOBILE, PROXY, RELA
 from .sources import SOURCES
 
 LIST_LIMIT = 4 * 1024 * 1024  # the plugin's bound for one decompressed list
+ASN_SOURCE = re.compile(r'(asn|operator-asn|mobile-asn)-([0-9]+)$')
+ASN_SOURCES = dict(url='https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
+                   terms='RIPEstat announced prefixes; RIPE NCC terms, attribution. Network names: intel/sources.py.')
+
+
+def asn_names(sources):
+    """{asn: network name} for the RIPEstat ASN sources in this build."""
+    from .sources import HOSTING_ASNS, MOBILE_ASNS, VPN_OPERATOR_ASNS
+    known = {**MOBILE_ASNS, **HOSTING_ASNS, **VPN_OPERATOR_ASNS}
+    return {m.group(2): known.get(int(m.group(2)), '') for m in (ASN_SOURCE.match(s.id) for s in sources) if m}
+
+
 MANIFEST_LIMIT = 60_000       # the plugin rejects a manifest above 65,536 bytes; keep a margin
 SHRINK_ALARM = 0.20
 
@@ -56,7 +69,8 @@ DENSE_ASN_MIN_OPERATORS = 4  # owner decision, 7 October 2026
 DENSE_ASN_EXCLUDE = {133480}
 # Sources that do not count as an operator for that rule: Nym's exit gateways are run by many independent node
 # operators, so a few of them in a network say nothing about whom the network rents to (27 November 2026).
-DENSE_ASN_IGNORE_SOURCES = {'nym'}
+# ipapi-exits mixes many providers in one source; pia-seen is PIA again, already counted through `pia`.
+DENSE_ASN_IGNORE_SOURCES = {'nym', 'ipapi-exits', 'pia-seen'}
 
 
 class _Index:
@@ -318,10 +332,11 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     groups = {s.id: s.group for s in sources if s.group}
     proxies, proxies_from_history = proxy_networks(entries, groups, result[RELAY], os.path.join(state or 'state', 'proxy-history.json'), now)
     # Defaults (no error, not optional) are left out of each source's entry: the plugin reads at most 65,536 bytes.
-    listed = [{k: v for k, v in r.items() if not (k == 'error' and v is None) and not (k == 'optional' and v is False)}
-              for r in report]
+    # RIPEstat ASN sources share one URL template and terms, given once under `asn_sources`.
+    listed = [{k: v for k, v in r.items() if not (k == 'error' and v is None) and not (k == 'optional' and v is False)
+               and not (k in ('url', 'terms') and ASN_SOURCE.match(r['id']))} for r in report]
     manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=listed, warnings=warnings, lists={},
-                    additional_lists={},
+                    additional_lists={}, asn_sources=dict(ASN_SOURCES, names=asn_names(sources)),
                     proxy=dict(min_lists=PROXY_MIN_LISTS, history_days=PROXY_HISTORY_DAYS, addresses_from_history=proxies_from_history),
                     vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
                     tor_addresses_from_history=tor_kept, tor_history_days=TOR_HISTORY_DAYS,

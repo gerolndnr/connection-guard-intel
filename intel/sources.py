@@ -222,6 +222,33 @@ def parse_nym(body):
     return vpn([ip for g in json.loads(body) for ip in g.get('ip_addresses') or []], 'nym')
 
 
+def _recent(rows, days):
+    """Rows (address, 'YYYY-MM-DD...' timestamp) seen within `days` of the newest row: the lists keep old entries."""
+    import datetime
+    stamps = [t[:10] for _, t in rows if re.match(r'\d{4}-\d{2}-\d{2}', t or '')]
+    if not stamps:
+        return []
+    cutoff = (datetime.date.fromisoformat(max(stamps)) - datetime.timedelta(days=days)).isoformat()
+    return [ip for ip, t in rows if (t or '')[:10] >= cutoff]
+
+
+def parse_pia_seen(body, days=14):
+    """Lars-/PIA-servers: PIA server addresses collected from PIA's rotating DNS, with the time each was last seen."""
+    rows = [(r.get('IP', ''), r.get('Last seen', '')) for r in csv.DictReader(io.StringIO(body.decode('utf-8', 'replace')))]
+    return vpn(_recent(rows, days), 'pia-seen')
+
+
+# Exits of peer-to-peer services are their users' home connections, so they are left out.
+IPAPI_P2P = {'mysterium', 'vpngate', 'urban vpn', 'hola vpn', 'hola'}
+
+
+def parse_ipapi_exits(body, days=7):
+    """ipapi.is's public table of observed VPN exit nodes (commercial providers only)."""
+    rows = re.findall(r'<tr><td>([^<]+)</td><td><a [^>]*>([0-9a-fA-F:.]+)</a></td><td>([^<]*)</td>', body.decode('utf-8', 'replace'))
+    keep = [(ip, seen) for provider, ip, seen in rows if provider.strip().lower() not in IPAPI_P2P]
+    return vpn(_recent(keep, days), 'ipapi-exits')
+
+
 def parse_surfshark(body, resolve=None):
     hosts = sorted({c['connectionName'] for c in json.loads(body) if c.get('connectionName')})
     resolve = resolve or resolve_all
@@ -406,8 +433,8 @@ HOSTING_ASNS = {
     53356: 'Free Range Cloud Hosting', 42831: 'UK Dedicated Servers', 397423: 'Tier.Net', 46664: 'VolumeDrive',
     400587: 'Ryamer', 41564: 'Orion Network', 394256: 'Tech Futures Interactive', 133480: '5G Network Operations',
     4785: 'xTom', 3258: 'xTom Japan',
-    # Added 27 November 2026 from where commercial VPN exits without a published server list sit (a third-party
-    # table of observed exits, used only as a pointer: none of its addresses is in Intel). Each network was checked by
+    # Added 27 November 2026 from where commercial VPN exits without a published server list sit (ipapi.is's public
+    # table of observed exits). Each network was checked by
     # name and by its PeeringDB type; networks that call themselves Cable/DSL/ISP, transit carriers, research and
     # government networks and leasing platforms were left out.
     46475: 'Limestone Networks', 136258: 'OneProvider (BrainStorm Network)', 200651: 'FlokiNET', 63023: 'GTHost',
@@ -441,6 +468,12 @@ VPN_OPERATOR_ASNS = {
     # VyprVPN: every server in its published list (gluetun) sits in these two networks of Powerhouse Management, the
     # company that runs VyprVPN (ARIN registrant of AS22363; AS40861 Paradise Networks has Powerhouse as admin contact).
     22363: 'Powerhouse Management (VyprVPN)', 40861: 'Paradise Networks (Powerhouse Management, VyprVPN)',
+    # From X4BNet lists_vpn's reviewed VPN ASNs (input/vpn/ASN.txt, with issue links), checked on RIPEstat;
+    # ASNs that announce nothing are left out until they do.
+    216025: 'Mullvad VPN AB', 398391: 'Perimeter 81 (Check Point SASE)', 20448: 'Peace Communications (VPNtranet)',
+    32751: 'Nuclearfallout Enterprises (Octovpn)', 401401: 'Unredacted (NoiseNet)', 401720: 'Unredacted',
+    200373: '3xK Tech', 198571: '3xK Tech (PlainProxies)', 207957: 'SERV.HOST', 397282: 'Castle VPN',
+    27683: 'VPN de Mexico', 218908: 'SSS VPN Technical', 208765: 'Bullet Proof VPN', 219329: 'Flash Edge (Flashproxy)',
 }
 
 
@@ -472,11 +505,11 @@ SOURCES = [
            'RFC 8805 geofeed, published for public consumption.', True),
 ] + [
     Source(f'asn-{asn}', HOSTING, f'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
-           parse_ripestat(f'asn-{asn}'), f'RIPEstat announced prefixes, AS{asn} {name}; RIPE NCC terms, attribution.', True)
+           parse_ripestat(f'asn-{asn}'), f'RIPEstat (RIS) announced prefixes of AS{asn} {name}; RIPE NCC terms, attribution.', True)
     for asn, name in HOSTING_ASNS.items()
 ] + [
     Source(f'operator-asn-{asn}', VPN, f'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
-           parse_operator_asn(f'operator-asn-{asn}'), f'RIPEstat announced prefixes, AS{asn} {name}; RIPE NCC terms, attribution.', True)
+           parse_operator_asn(f'operator-asn-{asn}'), f'RIPEstat (RIS) announced prefixes of AS{asn} {name}; RIPE NCC terms, attribution.', True)
     for asn, name in VPN_OPERATOR_ASNS.items()
 ] + [
     # VPN operators: the server lists their own apps load. Only the addresses are published, with attribution and a
@@ -486,7 +519,11 @@ SOURCES = [
            parse_nordvpn, 'Undocumented public API used by its apps, no licence text.', True),
     Source('ivpn', VPN, 'https://api.ivpn.net/v4/servers.json', parse_ivpn, 'Public server list used by its open-source apps, no licence text.', True),
     Source('pia', VPN, 'https://serverlist.piaservers.net/vpninfo/servers/v6', parse_pia, 'Public server list used by its apps, no licence text.', True),
-    # Added 27 November 2026 under the same decision and safeguards.
+    # Added 27 November 2026; owner decision: sources are chosen by quality, not by their terms.
+    Source('pia-seen', VPN, GH + 'Lars-/PIA-servers/master/export.csv', parse_pia_seen,
+           'Lars-/PIA-servers, PIA addresses from its rotating DNS; no licence.', True, optional=True),
+    Source('ipapi-exits', VPN, 'https://ipapi.is/vpn-exit-nodes.html', parse_ipapi_exits,
+           'ipapi.is public table of observed VPN exits; its terms restrict reuse.', True, optional=True),
     Source('nym', VPN, 'https://mainnet-node-status-api.nymtech.cc/dvpn/v1/directory/gateways/exit', parse_nym,
            'Public exit-gateway directory used by the NymVPN apps, no licence text.', True, optional=True),
     Source('surfshark', VPN, 'https://api.surfshark.com/v4/server/clusters/generic', parse_surfshark,

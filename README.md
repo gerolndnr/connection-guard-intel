@@ -4,7 +4,7 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 
 | List | Meaning in Connection Guard |
 | --- | --- |
-| `vpn.txt` | Commercial VPN servers and exits from 25 operators (including NymVPN's exit gateways), the ranges around them, and VPN-dominated data-centre networks: positive |
+| `vpn.txt` | Commercial VPN servers and exits from 25 operators (including NymVPN's exit gateways), observed exits of further VPNs (ipapi.is), the ranges around them, and VPN-dominated data-centre networks: positive |
 | `tor.txt` | Tor exits, kept 3 days after they were last listed: positive |
 | `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting. Connection Guard 0.6.1 lets them in by default; from 0.6.2 they count as VPN by default (`relay: VPN`), because a banned player can switch WARP on to come back |
 | `proxy.txt` | Open proxies named by public proxy lists of at least two different maintainers, kept 7 days: positive. Read by Connection Guard 0.6.1 and later; listed in `manifest.json` under `additional_lists`, which 0.6.0 ignores. Never inside a relay range. |

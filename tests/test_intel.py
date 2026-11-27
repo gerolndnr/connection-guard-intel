@@ -71,6 +71,12 @@ class Parsers(unittest.TestCase):
         nym = json.dumps([{'ip_addresses': ['89.36.162.71', '2a06:f902:4001:100::a93:a205'], 'role': 'Inactive'},
                           {'ip_addresses': None}, {}]).encode()
         self.assertEqual(nets(sources.parse_nym(nym)), ['2a06:f902:4001:100::/64', '89.36.162.71/32'])
+        pia = b'IP,Region,"Last seen"\n140.228.24.179,"CA Montreal",2026-11-24T20:32:08+01:00\n196.196.53.101,Latvia,2026-10-01T23:00:14+01:00\n'
+        self.assertEqual(nets(sources.parse_pia_seen(pia)), ['140.228.24.179/32'])
+        row = '<tr><td>{}</td><td><a href="https://api.ipapi.is/?q={ip}">{ip}</a></td><td>{}</td><td>x</td></tr>\n'
+        table = (row.format('ExpressVPN', '2026-11-26 01:39', ip='196.244.192.5') + row.format('Mysterium', '2026-11-26 01:00', ip='89.36.162.71')
+                 + row.format('NordVPN', '2026-11-01 10:00', ip='89.35.28.131')).encode()
+        self.assertEqual(nets(sources.parse_ipapi_exits(table)), ['196.244.192.5/32'])
         ov = json.dumps({'datacenters': [{'servers': [{'ip': '37.120.212.227'}]}]}).encode()
         self.assertEqual(nets(sources.parse_ovpn(ov)), ['37.120.212.227/32'])
         az = json.dumps({'locations': [{'pool': 'ar-bue.azirevpn.net'}]}).encode()
