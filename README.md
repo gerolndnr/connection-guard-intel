@@ -4,11 +4,11 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 
 | List | Meaning in Connection Guard |
 | --- | --- |
-| `vpn.txt` | Commercial VPN servers and exits from 24 operators, the ranges around them, and VPN-dominated data-centre networks: positive |
+| `vpn.txt` | Commercial VPN servers and exits from 25 operators (including NymVPN's exit gateways), the ranges around them, and VPN-dominated data-centre networks: positive |
 | `tor.txt` | Tor exits, kept 3 days after they were last listed: positive |
-| `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting, allowed by default |
+| `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting. Connection Guard 0.6.1 lets them in by default; from 0.6.2 they count as VPN by default (`relay: VPN`), because a banned player can switch WARP on to come back |
 | `proxy.txt` | Open proxies named by public proxy lists of at least two different maintainers, kept 7 days: positive. Read by Connection Guard 0.6.1 and later; listed in `manifest.json` under `additional_lists`, which 0.6.0 ignores. Never inside a relay range. |
-| `hosting.txt` | Data centres and clouds: review only, never a VPN verdict on its own. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
+| `hosting.txt` | Data centres and clouds: its own setting. Connection Guard 0.6.1 treats it as review only; from 0.6.2 a hit blocks by default (`hosting: BLOCK`, `REVIEW` restores review only). The list therefore holds no consumer, mobile or transit networks. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
 | `booster.txt` | Gaming booster nodes (Mudfish): a label. Connection Guard 0.6.2 lets them in by default (`booster: ALLOW`) or counts them as VPN (`booster: VPN`). Booster nodes are taken out of inferred VPN ranges, so older versions no longer refuse them either; a server a VPN operator publishes stays VPN. |
 | `mobile.txt` | Mobile carriers behind carrier-grade NAT: a label. Many players share one address, so `/cg explain` warns that an IP ban or an IP-based alt check hits innocent players there. |
 | `shared.txt` | Exits that many accounts use across several Connection Guard servers (network signals): a review label for alt accounts and residential proxies. Evaluation only until it is measured; not published yet. |

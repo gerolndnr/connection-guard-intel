@@ -54,6 +54,9 @@ MIN_24S_PER_22 = 2
 DENSE_ASN_MIN_OPERATORS = 4  # owner decision, 7 October 2026
 # Reviewed exceptions: networks that may also serve business or consumer customers stay at the /24 rule.
 DENSE_ASN_EXCLUDE = {133480}
+# Sources that do not count as an operator for that rule: Nym's exit gateways are run by many independent node
+# operators, so a few of them in a network say nothing about whom the network rents to (27 November 2026).
+DENSE_ASN_IGNORE_SOURCES = {'nym'}
 
 
 class _Index:
@@ -100,7 +103,8 @@ def dense_hosting(entries, min_operators=DENSE_ASN_MIN_OPERATORS, exclude=DENSE_
     for e in entries:
         if e.category == HOSTING and e.source.startswith('asn-') and e.network.version == 4:
             by_asn.setdefault(int(e.source[4:]), []).append(e.network)
-    servers = [e for e in entries if e.category == VPN and e.method == 'exact' and e.network.version == 4]
+    servers = [e for e in entries if e.category == VPN and e.method == 'exact' and e.network.version == 4
+               and e.source not in DENSE_ASN_IGNORE_SOURCES]
     operators = {}
     for asn, prefixes in by_asn.items():
         index = _Index(prefixes)
@@ -313,7 +317,10 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     warnings = check_shrink(previous, counts, force)
     groups = {s.id: s.group for s in sources if s.group}
     proxies, proxies_from_history = proxy_networks(entries, groups, result[RELAY], os.path.join(state or 'state', 'proxy-history.json'), now)
-    manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=report, warnings=warnings, lists={},
+    # Defaults (no error, not optional) are left out of each source's entry: the plugin reads at most 65,536 bytes.
+    listed = [{k: v for k, v in r.items() if not (k == 'error' and v is None) and not (k == 'optional' and v is False)}
+              for r in report]
+    manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=listed, warnings=warnings, lists={},
                     additional_lists={},
                     proxy=dict(min_lists=PROXY_MIN_LISTS, history_days=PROXY_HISTORY_DAYS, addresses_from_history=proxies_from_history),
                     vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
@@ -333,7 +340,8 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
                                 networks=len(networks), addresses=addresses(networks))
     if set(manifest['lists']) != set(CATEGORIES):
         raise SystemExit(f'manifest lists must be exactly {CATEGORIES} for Connection Guard 0.6.0, got {sorted(manifest["lists"])}')
-    data = json.dumps(manifest, indent=1, sort_keys=True).encode()
+    # Compact: the plugin reads at most 65,536 bytes, and every source adds a report entry.
+    data = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
     if len(data) > MANIFEST_LIMIT:
         raise SystemExit(f'manifest.json is {len(data)} bytes; Connection Guard rejects manifests above 65,536 (limit here {MANIFEST_LIMIT})')
     with open(os.path.join(out, 'manifest.json'), 'wb') as f:
@@ -359,7 +367,7 @@ def main(argv=None):
     m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn,
               previous_manifest=a.previous_manifest)
     for r in m['sources']:
-        print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r['error'] else ''))
+        print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r.get('error') else ''))
     for c, l in {**m['lists'], **m.get('additional_lists', {})}.items():
         print(f"{c:8} {l['networks']:>7} networks {l['addresses']:>14,} addresses {l['bytes']/1e6:5.2f} MB")
     failed = [r for r in m['sources'] if r['status'] != 'ok']
@@ -372,7 +380,7 @@ def main(argv=None):
             days = HISTORY_DAYS if r['category'] == VPN else TOR_HISTORY_DAYS
             print(f"warning: source {r['id']} {r['status']} ({streaks[r['id']]} builds in a row); its last addresses stay for {days} days")
             if streaks[r['id']] >= ALERT_BUILDS:
-                alerts.append(f"{r['id']} {r['status']} in {streaks[r['id']]} builds in a row: {r['error']}")
+                alerts.append(f"{r['id']} {r['status']} in {streaks[r['id']]} builds in a row: {r.get('error')}")
     if any(not r.get('optional') and not kept_by_history(r) for r in failed):
         sys.exit(2)
     if a.alerts:

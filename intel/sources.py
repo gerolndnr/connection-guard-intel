@@ -216,6 +216,12 @@ def parse_pia(body):
     return vpn(texts, 'pia')
 
 
+def parse_nym(body):
+    """NymVPN's exit-gateway directory (the one its apps load): every gateway's addresses. The gateways are run by
+    independent node operators, mostly in data centres; each address is a live NymVPN exit, like a Tor exit."""
+    return vpn([ip for g in json.loads(body) for ip in g.get('ip_addresses') or []], 'nym')
+
+
 def parse_surfshark(body, resolve=None):
     hosts = sorted({c['connectionName'] for c in json.loads(body) if c.get('connectionName')})
     resolve = resolve or resolve_all
@@ -400,6 +406,23 @@ HOSTING_ASNS = {
     53356: 'Free Range Cloud Hosting', 42831: 'UK Dedicated Servers', 397423: 'Tier.Net', 46664: 'VolumeDrive',
     400587: 'Ryamer', 41564: 'Orion Network', 394256: 'Tech Futures Interactive', 133480: '5G Network Operations',
     4785: 'xTom', 3258: 'xTom Japan',
+    # Added 27 November 2026 from where commercial VPN exits without a published server list sit (a third-party
+    # table of observed exits, used only as a pointer: none of its addresses is in Intel). Each network was checked by
+    # name and by its PeeringDB type; networks that call themselves Cable/DSL/ISP, transit carriers, research and
+    # government networks and leasing platforms were left out.
+    46475: 'Limestone Networks', 136258: 'OneProvider (BrainStorm Network)', 200651: 'FlokiNET', 63023: 'GTHost',
+    62563: 'GTHost Canada', 30860: 'Virtual Systems', 57169: 'EDIS', 36666: 'GloboTech Communications',
+    56630: 'Melbicom', 8849: 'Melbicom', 202053: 'UpCloud', 25697: 'UpCloud USA', 4213: 'Evocative (Krypt)',
+    62610: 'Zenlayer Elastic Compute', 37684: 'Angani', 206991: 'IXIR', 34989: 'ServeTheWorld', 132372: 'GB Network Solutions',
+    154177: 'LightNode', 24961: 'myLoc (WIIT)', 39486: 'HostRoyale', 207990: 'HostRoyale', 397373: 'H4Y Technologies',
+    200698: 'Globalhost', 52423: 'Data Miners (Racknation)', 56322: 'ServerAstra', 30475: 'Handy Networks',
+    215373: 'Delska', 59787: 'WebSP', 61138: 'Zappie Host', 197540: 'netcup', 214996: 'netcup', 61102: 'Interhost Networks',
+    50613: 'Advania Hosting (Thor DC)', 202425: 'IP Volume', 39020: 'Comvive Servidores', 20860: 'iomart',
+    200019: 'AlexHost', 215311: 'Regxa Cloud', 56655: 'Gigahost', 40021: 'Contabo USA', 61272: 'Bacloud',
+    37738: 'Hostoweb', 51765: 'Crea Nova Datacenter', 268581: 'QNAX Data Center', 398779: 'Ace Host',
+    150249: 'Atharva', 48881: 'DataNode', 395092: 'Shock Hosting', 21100: 'ITL (Route 95)', 204957: 'Green Floid (Route 95)',
+    35758: 'HQserv Networks', 43128: 'Webtasy', 61254: 'Estoxy', 209181: 'Zenex 5ive', 45671: 'Servers Australia',
+    29691: 'Nine Internet Solutions',
 }
 
 # Networks that VPN operators run themselves: everything announced there is VPN infrastructure, whatever the
@@ -415,6 +438,9 @@ VPN_OPERATOR_ASNS = {
     # VPN (RIPE holders "ProtonVPN", "ProtonVPN-2", "PV-HOSTED") and by the hosting rules. AS62371 is Proton's mail
     # and company network and is not listed.
     209103: 'ProtonVPN (Proton AG)', 199218: 'ProtonVPN-2 (Proton AG)', 208172: 'PV-HOSTED (Proton AG)',
+    # VyprVPN: every server in its published list (gluetun) sits in these two networks of Powerhouse Management, the
+    # company that runs VyprVPN (ARIN registrant of AS22363; AS40861 Paradise Networks has Powerhouse as admin contact).
+    22363: 'Powerhouse Management (VyprVPN)', 40861: 'Paradise Networks (Powerhouse Management, VyprVPN)',
 }
 
 
@@ -446,11 +472,11 @@ SOURCES = [
            'RFC 8805 geofeed, published for public consumption.', True),
 ] + [
     Source(f'asn-{asn}', HOSTING, f'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
-           parse_ripestat(f'asn-{asn}'), f'RIPEstat (RIS) announced prefixes of AS{asn} {name}; RIPE NCC terms, attribution.', True)
+           parse_ripestat(f'asn-{asn}'), f'RIPEstat announced prefixes, AS{asn} {name}; RIPE NCC terms, attribution.', True)
     for asn, name in HOSTING_ASNS.items()
 ] + [
     Source(f'operator-asn-{asn}', VPN, f'https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
-           parse_operator_asn(f'operator-asn-{asn}'), f'RIPEstat (RIS) announced prefixes of AS{asn} {name}; RIPE NCC terms, attribution.', True)
+           parse_operator_asn(f'operator-asn-{asn}'), f'RIPEstat announced prefixes, AS{asn} {name}; RIPE NCC terms, attribution.', True)
     for asn, name in VPN_OPERATOR_ASNS.items()
 ] + [
     # VPN operators: the server lists their own apps load. Only the addresses are published, with attribution and a
@@ -460,6 +486,9 @@ SOURCES = [
            parse_nordvpn, 'Undocumented public API used by its apps, no licence text.', True),
     Source('ivpn', VPN, 'https://api.ivpn.net/v4/servers.json', parse_ivpn, 'Public server list used by its open-source apps, no licence text.', True),
     Source('pia', VPN, 'https://serverlist.piaservers.net/vpninfo/servers/v6', parse_pia, 'Public server list used by its apps, no licence text.', True),
+    # Added 27 November 2026 under the same decision and safeguards.
+    Source('nym', VPN, 'https://mainnet-node-status-api.nymtech.cc/dvpn/v1/directory/gateways/exit', parse_nym,
+           'Public exit-gateway directory used by the NymVPN apps, no licence text.', True, optional=True),
     Source('surfshark', VPN, 'https://api.surfshark.com/v4/server/clusters/generic', parse_surfshark,
            'Public cluster list (host names, resolved by DNS), no licence text.', True),
     # Added 7 October 2026 under the same decision and safeguards (addresses only, attribution, takedown).

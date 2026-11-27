@@ -68,6 +68,9 @@ class Parsers(unittest.TestCase):
         self.assertEqual(nets(sources.parse_airvpn(air)), ['185.65.134.66/32', '185.65.134.67/32', '2a03:1b20:4:f011::/64'])
         ws = json.dumps({'data': [{'groups': [{'nodes': [{'ip': '89.35.28.131', 'ip2': '89.35.28.132', 'ip3': '89.35.28.133'}]}]}, {'groups': None}]}).encode()
         self.assertEqual(len(sources.parse_windscribe(ws)), 3)
+        nym = json.dumps([{'ip_addresses': ['89.36.162.71', '2a06:f902:4001:100::a93:a205'], 'role': 'Inactive'},
+                          {'ip_addresses': None}, {}]).encode()
+        self.assertEqual(nets(sources.parse_nym(nym)), ['2a06:f902:4001:100::/64', '89.36.162.71/32'])
         ov = json.dumps({'datacenters': [{'servers': [{'ip': '37.120.212.227'}]}]}).encode()
         self.assertEqual(nets(sources.parse_ovpn(ov)), ['37.120.212.227/32'])
         az = json.dumps({'locations': [{'pool': 'ar-bue.azirevpn.net'}]}).encode()
