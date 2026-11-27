@@ -1,0 +1,48 @@
+name: proxy shadow
+# Evaluation only: runs the offline proxy trial against the signed published lists and records counts.
+# Nothing here changes the published lists; the trial's additions stay in this workflow's cache.
+on:
+  schedule: [{ cron: '47 4 * * *' }]  # after the daily build (03:17 UTC)
+  workflow_dispatch:
+permissions: { contents: write }
+concurrency: { group: proxy-shadow, cancel-in-progress: false }
+jobs:
+  shadow:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install cryptography==45.0.7
+      - name: Read the signed published lists
+        run: |
+          git fetch --no-tags --depth=1 origin refs/heads/lists
+          mkdir baseline
+          git archive FETCH_HEAD | tar -x -C baseline
+      - name: Read the shadow reports so far
+        run: |
+          mkdir reports
+          if git fetch --no-tags --depth=1 origin refs/heads/shadow; then git archive FETCH_HEAD | tar -x -C reports; fi
+      - uses: actions/cache/restore@v4
+        with: { path: shadow-state, key: "proxy-shadow-${{ github.run_id }}", restore-keys: proxy-shadow- }
+      - name: Shadow run
+        id: run
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
+        run: python -m intel.proxy_shadow --baseline baseline --work "$RUNNER_TEMP/work" --state shadow-state --reports reports
+      - uses: actions/cache/save@v4
+        if: always() && steps.run.outcome != 'skipped' && steps.run.outcome != 'cancelled'
+        with: { path: shadow-state, key: "proxy-shadow-${{ github.run_id }}" }
+      # The branch `shadow` holds only the count reports, one commit per run on top of the last.
+      - name: Publish the counts to the shadow branch
+        if: always() && steps.run.outcome != 'skipped' && steps.run.outcome != 'cancelled'
+        run: |
+          cd reports
+          git init -q -b shadow
+          git -c user.name="intel shadow" -c user.email="actions@users.noreply.github.com" add -A
+          git -c user.name="intel shadow" -c user.email="actions@users.noreply.github.com" commit -q -m "Shadow counts as of $(ls -1 *.json | tail -1 | cut -d. -f1)"
+          for attempt in 1 2 3; do
+            git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" shadow && exit 0
+            sleep $((attempt * 20))
+          done
+          exit 1

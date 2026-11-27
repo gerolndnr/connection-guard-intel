@@ -75,6 +75,13 @@ this trial filters observations and writes only exact IPs, not ports or other up
 The result is marked `evaluation_only`, written unsigned, and isolated from the production build and its
 history. A successful replay is not clearance to redistribute the feed.
 
+**Shadow measurement (since 27 November 2026).** The `proxy shadow` workflow runs the trial every day after the
+build (`python -m intel.proxy_shadow`): it pins the inputs to the newest commits before the signed published lists,
+builds the candidate and records counts on the branch `shadow`, never addresses. Per day: how many addresses the
+trial would add, how many of them lie outside every hosting range, and how many of each earlier day's additions the
+published `proxy.txt` lists 1, 3 and 7 days later. The additions themselves stay in the workflow's cache for 14 days.
+monosans keeps a single commit and cannot be pinned before the baseline, so it does not vote in the trial.
+
 ## Evaluation (7 October 2026)
 
 Scored on the [mc-antivpn-bench](https://github.com/gerolndnr/mc-antivpn-bench) dataset `detection-v1`, 692 labelled addresses, locally with `python -m intel.evaluate`:
