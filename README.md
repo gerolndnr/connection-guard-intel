@@ -1,4 +1,6 @@
-# Connection Guard Intel
+# Connection Guard Intel Local
+
+Connection Guard Intel has two parts. **Intel Local** is this repository: signed lists that Connection Guard evaluates on your own server. **Intel Cloud** is a separate hosted service for servers linked to the Connection Guard dashboard; it is not built from here.
 
 Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily from public sources. Connection Guard loads them as local lists: player addresses never leave the server, and there is no quota and no per-lookup cost.
 

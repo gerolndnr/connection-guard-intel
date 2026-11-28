@@ -1,4 +1,4 @@
-"""Connection Guard Intel for Python bots and tools.
+"""Connection Guard Intel Local for Python bots and tools.
 
 Downloads the signed lists from intel.connectionguard.net, verifies the signature and every list's SHA-256, and
 answers lookups in memory: the addresses you check never leave your machine.

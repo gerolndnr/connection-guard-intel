@@ -50,7 +50,7 @@ def _change(new, old):
 
 def report(old, new):
     month = datetime.datetime.fromisoformat(old['as_of'].replace('Z', '+00:00'))
-    lines = [f"# Connection Guard Intel, {month.strftime('%B %Y')}", '',
+    lines = [f"# Connection Guard Intel Local, {month.strftime('%B %Y')}", '',
              f"Builds compared: {old['as_of']} and {new['as_of']}. Every number comes from the two signed manifests.", '',
              '| List | Networks | Change |', '| --- | ---: | ---: |']
     old_lists, new_lists = _lists(old), _lists(new)

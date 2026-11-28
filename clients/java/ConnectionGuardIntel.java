@@ -17,7 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Connection Guard Intel for Java plugins and tools (Java 11 or later, no dependencies). Copy this file into your
+ * Connection Guard Intel Local for Java plugins and tools (Java 11 or later, no dependencies). Copy this file into your
  * project and change the package.
  *
  * <p>Downloads the signed lists from intel.connectionguard.net, verifies the signature and every list's SHA-256, and

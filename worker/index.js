@@ -60,7 +60,7 @@ export default {
     if (request.method !== "GET" && request.method !== "HEAD") return new Response("method not allowed\n", { status: 405 });
     const name = new URL(request.url).pathname.slice(1);
     if (name === "") {
-      return new Response(`Connection Guard Intel lists: ${[...LISTS.keys(), ...META.keys()].join(", ")}\n` +
+      return new Response(`Connection Guard Intel Local lists: ${[...LISTS.keys(), ...META.keys()].join(", ")}\n` +
         "Source and terms: https://github.com/gerolndnr/connection-guard-intel\n", { headers: { "content-type": TEXT } });
     }
     let response;

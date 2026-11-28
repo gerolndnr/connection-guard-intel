@@ -1,6 +1,6 @@
 # Clients
 
-One file each, for using Connection Guard Intel in your own plugin, proxy or Discord bot. Each one downloads the signed
+One file each, for using Connection Guard Intel Local in your own plugin, proxy or Discord bot. Each one downloads the signed
 lists, verifies the ECDSA signature against the pinned key and every list's SHA-256, refuses lists older than 72 hours,
 and answers lookups in memory. The addresses you check never leave your machine, and there is no quota.
 

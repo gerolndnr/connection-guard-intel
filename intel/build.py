@@ -184,7 +184,7 @@ def without_boosters(entries, vpn):
 
 def render(category, networks, report, as_of):
     used = [r for r in report if r['category'] == category and r['status'] == 'ok']
-    head = [f'# Connection Guard Intel: {category}', f'# as-of {as_of}', '# https://github.com/gerolndnr/connection-guard-intel',
+    head = [f'# Connection Guard Intel Local: {category}', f'# as-of {as_of}', '# https://github.com/gerolndnr/connection-guard-intel',
             '# Sources:'] + [f'#   {r["id"]}: {r["url"]} ({r["terms"]})' for r in used]
     lines = [str(n) if n.prefixlen < n.max_prefixlen else str(n.network_address) for n in networks]
     return ('\n'.join(head + lines) + '\n').encode()
