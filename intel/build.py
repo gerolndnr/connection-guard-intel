@@ -12,13 +12,26 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import sys
 import time
 
-from .model import ADDITIONAL, BOOSTER, CATEGORIES, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, fetch
+from .model import ADDITIONAL, BOOSTER, CATEGORIES, HOSTING, MOBILE, P2P, PROXY, RELAY, SHARED, TOR, VPN, Entry, fetch
 from .sources import SOURCES
 
 LIST_LIMIT = 4 * 1024 * 1024  # the plugin's bound for one decompressed list
+ASN_SOURCE = re.compile(r'(asn|operator-asn|mobile-asn)-([0-9]+)$')
+ASN_SOURCES = dict(url='https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}',
+                   terms='RIPEstat announced prefixes; RIPE NCC terms, attribution. Network names: intel/sources.py.')
+
+
+def asn_names(sources):
+    """{asn: network name} for the RIPEstat ASN sources in this build."""
+    from .sources import HOSTING_ASNS, MOBILE_ASNS, VPN_OPERATOR_ASNS
+    known = {**MOBILE_ASNS, **HOSTING_ASNS, **VPN_OPERATOR_ASNS}
+    return {m.group(2): known.get(int(m.group(2)), '') for m in (ASN_SOURCE.match(s.id) for s in sources) if m}
+
+
 MANIFEST_LIMIT = 60_000       # the plugin rejects a manifest above 65,536 bytes; keep a margin
 SHRINK_ALARM = 0.20
 
@@ -54,6 +67,10 @@ MIN_24S_PER_22 = 2
 DENSE_ASN_MIN_OPERATORS = 4  # owner decision, 7 October 2026
 # Reviewed exceptions: networks that may also serve business or consumer customers stay at the /24 rule.
 DENSE_ASN_EXCLUDE = {133480}
+# Sources that do not count as an operator for that rule: Nym's exit gateways are run by many independent node
+# operators, so a few of them in a network say nothing about whom the network rents to (27 November 2026).
+# ipapi-exits mixes many providers in one source; pia-seen is PIA again, already counted through `pia`.
+DENSE_ASN_IGNORE_SOURCES = {'nym', 'ipapi-exits', 'pia-seen'}
 
 
 class _Index:
@@ -100,7 +117,8 @@ def dense_hosting(entries, min_operators=DENSE_ASN_MIN_OPERATORS, exclude=DENSE_
     for e in entries:
         if e.category == HOSTING and e.source.startswith('asn-') and e.network.version == 4:
             by_asn.setdefault(int(e.source[4:]), []).append(e.network)
-    servers = [e for e in entries if e.category == VPN and e.method == 'exact' and e.network.version == 4]
+    servers = [e for e in entries if e.category == VPN and e.method == 'exact' and e.network.version == 4
+               and e.source not in DENSE_ASN_IGNORE_SOURCES]
     operators = {}
     for asn, prefixes in by_asn.items():
         index = _Index(prefixes)
@@ -121,11 +139,12 @@ def lists(entries, dense_min=DENSE_ASN_MIN_OPERATORS):
     return out
 
 
-LABELS = (BOOSTER, MOBILE, SHARED)
+LABELS = (BOOSTER, MOBILE, SHARED, P2P)
 
 
 def label_lists(entries, result):
-    """The label lists, collapsed. A shared exit inside a relay or mobile network is already explained by that list."""
+    """The label lists, collapsed. A shared exit inside a relay or mobile network is already explained by that list, and a
+    P2P exit there is left out: blocking a carrier-grade NAT or relay address would hit many other players."""
     from .evaluate import Index
     out = {}
     for category in LABELS:
@@ -134,6 +153,7 @@ def label_lists(entries, result):
             sorted(ipaddress.collapse_addresses(n for n in nets if n.version == 6))
     explained = Index(result[RELAY] + out[MOBILE])
     out[SHARED] = [n for n in out[SHARED] if str(n.network_address) not in explained]
+    out[P2P] = [n for n in out[P2P] if str(n.network_address) not in explained]
     return out
 
 
@@ -313,8 +333,12 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
     warnings = check_shrink(previous, counts, force)
     groups = {s.id: s.group for s in sources if s.group}
     proxies, proxies_from_history = proxy_networks(entries, groups, result[RELAY], os.path.join(state or 'state', 'proxy-history.json'), now)
-    manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=report, warnings=warnings, lists={},
-                    additional_lists={},
+    # Defaults (no error, not optional) are left out of each source's entry: the plugin reads at most 65,536 bytes.
+    # RIPEstat ASN sources share one URL template and terms, given once under `asn_sources`.
+    listed = [{k: v for k, v in r.items() if not (k == 'error' and v is None) and not (k == 'optional' and v is False)
+               and not (k in ('url', 'terms') and ASN_SOURCE.match(r['id']))} for r in report]
+    manifest = dict(schema=1, as_of=as_of, evaluation_only=include_all, sources=listed, warnings=warnings, lists={},
+                    additional_lists={}, asn_sources=dict(ASN_SOURCES, names=asn_names(sources)),
                     proxy=dict(min_lists=PROXY_MIN_LISTS, history_days=PROXY_HISTORY_DAYS, addresses_from_history=proxies_from_history),
                     vpn_addresses_from_history=kept, history_days=HISTORY_DAYS,
                     tor_addresses_from_history=tor_kept, tor_history_days=TOR_HISTORY_DAYS,
@@ -333,7 +357,8 @@ def build(out, include_all=False, force=False, sources=None, key_pem=None, now=N
                                 networks=len(networks), addresses=addresses(networks))
     if set(manifest['lists']) != set(CATEGORIES):
         raise SystemExit(f'manifest lists must be exactly {CATEGORIES} for Connection Guard 0.6.0, got {sorted(manifest["lists"])}')
-    data = json.dumps(manifest, indent=1, sort_keys=True).encode()
+    # Compact: the plugin reads at most 65,536 bytes, and every source adds a report entry.
+    data = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
     if len(data) > MANIFEST_LIMIT:
         raise SystemExit(f'manifest.json is {len(data)} bytes; Connection Guard rejects manifests above 65,536 (limit here {MANIFEST_LIMIT})')
     with open(os.path.join(out, 'manifest.json'), 'wb') as f:
@@ -359,7 +384,7 @@ def main(argv=None):
     m = build(a.out, include_all=a.all, force=a.force, state=a.state, dense_min=a.dense_asn,
               previous_manifest=a.previous_manifest)
     for r in m['sources']:
-        print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r['error'] else ''))
+        print(f"{r['status']:6} {r['id']:22} {r['entries']:>7}" + (f"  {r['error']}" if r.get('error') else ''))
     for c, l in {**m['lists'], **m.get('additional_lists', {})}.items():
         print(f"{c:8} {l['networks']:>7} networks {l['addresses']:>14,} addresses {l['bytes']/1e6:5.2f} MB")
     failed = [r for r in m['sources'] if r['status'] != 'ok']
@@ -372,7 +397,7 @@ def main(argv=None):
             days = HISTORY_DAYS if r['category'] == VPN else TOR_HISTORY_DAYS
             print(f"warning: source {r['id']} {r['status']} ({streaks[r['id']]} builds in a row); its last addresses stay for {days} days")
             if streaks[r['id']] >= ALERT_BUILDS:
-                alerts.append(f"{r['id']} {r['status']} in {streaks[r['id']]} builds in a row: {r['error']}")
+                alerts.append(f"{r['id']} {r['status']} in {streaks[r['id']]} builds in a row: {r.get('error')}")
     if any(not r.get('optional') and not kept_by_history(r) for r in failed):
         sys.exit(2)
     if a.alerts:

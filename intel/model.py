@@ -20,7 +20,9 @@ BOOSTER = 'BOOSTER'  # gaming booster node (Mudfish): a player tunnels for laten
 MOBILE = 'MOBILE'    # mobile carrier network behind carrier-grade NAT: many players share one address, so IP bans
                      # and IP-based alt detection hit innocent players
 SHARED = 'SHARED'    # an exit that many accounts use across several servers (network signals): review, may be a proxy
-ADDITIONAL = (PROXY, BOOSTER, MOBILE, SHARED)
+P2P = 'P2P'          # exit of a peer-to-peer VPN (VPN Gate, Mysterium, Hola, Urban VPN): someone else's home connection,
+                     # rotating; Connection Guard 0.6.2 counts it as VPN by default (`p2p: VPN`)
+ADDITIONAL = (PROXY, BOOSTER, MOBILE, SHARED, P2P)
 
 USER_AGENT = 'connection-guard-intel/0.1 (+https://github.com/gerolndnr/connection-guard-intel)'
 

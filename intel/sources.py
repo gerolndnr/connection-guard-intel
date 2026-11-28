@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .model import BOOSTER, HOSTING, MOBILE, PROXY, RELAY, SHARED, TOR, VPN, Entry, net
+from .model import BOOSTER, HOSTING, MOBILE, P2P, PROXY, RELAY, SHARED, TOR, VPN, Entry, net
 
 
 @dataclass
@@ -216,6 +216,74 @@ def parse_pia(body):
     return vpn(texts, 'pia')
 
 
+def parse_nym(body):
+    """NymVPN's exit-gateway directory (the one its apps load): every gateway's addresses. The gateways are run by
+    independent node operators, mostly in data centres; each address is a live NymVPN exit, like a Tor exit. A gateway
+    the directory places in a residential network runs on someone's home connection: it goes to the P2P label with its
+    exact addresses (no /64 around IPv6), so a neighbour on the same line or a later holder of the address is not hit."""
+    gateways = json.loads(body)
+    home = [ip for g in gateways if _nym_kind(g) == 'residential' for ip in g.get('ip_addresses') or []]
+    rest = [ip for g in gateways if _nym_kind(g) != 'residential' for ip in g.get('ip_addresses') or []]
+    return vpn(rest, 'nym') + entries(home, P2P, 'nym')
+
+
+def _nym_kind(gateway):
+    asn = (gateway.get('location') or {}).get('asn')
+    return asn.get('kind') if isinstance(asn, dict) else None
+
+
+def _recent(rows, days):
+    """Rows (address, 'YYYY-MM-DD...' timestamp) seen within `days` of the newest row: the lists keep old entries."""
+    import datetime
+    stamps = [t[:10] for _, t in rows if re.match(r'\d{4}-\d{2}-\d{2}', t or '')]
+    if not stamps:
+        return []
+    cutoff = (datetime.date.fromisoformat(max(stamps)) - datetime.timedelta(days=days)).isoformat()
+    return [ip for ip, t in rows if (t or '')[:10] >= cutoff]
+
+
+def parse_pia_seen(body, days=14):
+    """Lars-/PIA-servers: PIA server addresses collected from PIA's rotating DNS, with the time each was last seen."""
+    rows = [(r.get('IP', ''), r.get('Last seen', '')) for r in csv.DictReader(io.StringIO(body.decode('utf-8', 'replace')))]
+    return vpn(_recent(rows, days), 'pia-seen')
+
+
+# Exits of peer-to-peer services are their users' home connections, so they are left out.
+IPAPI_P2P = {'mysterium', 'vpngate', 'urban vpn', 'hola vpn', 'hola'}
+
+
+# An exit the table attributes to a carrier's customer NAT pool shares its address with that carrier's customers.
+IPAPI_SHARED_ISP = re.compile(r'\bnat\b|\bcg-?nat\b', re.I)
+
+
+def _ipapi_rows(body):
+    """(provider, address, last seen, network name) per row; the network name is the table's last column."""
+    rows = re.findall(r'<tr><td>([^<]+)</td><td><a [^>]*>([0-9a-fA-F:.]+)</a></td><td>([^<]*)</td>(.*?)</tr>',
+                      body.decode('utf-8', 'replace'))
+    return [(p, ip, seen, (re.findall(r'<td>([^<]*)</td>', rest) or [''])[-1]) for p, ip, seen, rest in rows]
+
+
+def parse_ipapi_exits(body, days=7):
+    """ipapi.is's public table of observed VPN exit nodes (commercial providers only). Exits behind a carrier's
+    customer NAT pool are left out."""
+    keep = [(ip, seen) for provider, ip, seen, isp in _ipapi_rows(body)
+            if provider.strip().lower() not in IPAPI_P2P and not IPAPI_SHARED_ISP.search(isp)]
+    return vpn(_recent(keep, days), 'ipapi-exits')
+
+
+def parse_ipapi_p2p(body, days=3):
+    """The same table's peer-to-peer exits (Mysterium, VPN Gate, Urban VPN, Hola): home connections that rotate, so
+    only the last 3 days, exact addresses only (no /64 around IPv6 exits)."""
+    keep = [(ip, seen) for provider, ip, seen, _ in _ipapi_rows(body) if provider.strip().lower() in IPAPI_P2P]
+    return entries(_recent(keep, days), P2P, 'ipapi-p2p')
+
+
+def parse_vpngate(body):
+    """VPN Gate's public server list (vpngate.net/api/iphone): volunteers' servers that are up right now."""
+    lines = [l for l in body.decode('utf-8', 'replace').splitlines() if l and not l.startswith(('*', '#'))]
+    return entries([r[1] for r in csv.reader(lines) if len(r) > 1], P2P, 'vpngate')
+
+
 def parse_surfshark(body, resolve=None):
     hosts = sorted({c['connectionName'] for c in json.loads(body) if c.get('connectionName')})
     resolve = resolve or resolve_all
@@ -400,6 +468,23 @@ HOSTING_ASNS = {
     53356: 'Free Range Cloud Hosting', 42831: 'UK Dedicated Servers', 397423: 'Tier.Net', 46664: 'VolumeDrive',
     400587: 'Ryamer', 41564: 'Orion Network', 394256: 'Tech Futures Interactive', 133480: '5G Network Operations',
     4785: 'xTom', 3258: 'xTom Japan',
+    # Added 27 November 2026 from where commercial VPN exits without a published server list sit (ipapi.is's public
+    # table of observed exits). Each network was checked by
+    # name and by its PeeringDB type; networks that call themselves Cable/DSL/ISP, transit carriers, research and
+    # government networks and leasing platforms were left out.
+    46475: 'Limestone Networks', 136258: 'OneProvider (BrainStorm Network)', 200651: 'FlokiNET', 63023: 'GTHost',
+    62563: 'GTHost Canada', 30860: 'Virtual Systems', 57169: 'EDIS', 36666: 'GloboTech Communications',
+    56630: 'Melbicom', 8849: 'Melbicom', 202053: 'UpCloud', 25697: 'UpCloud USA', 4213: 'Evocative (Krypt)',
+    62610: 'Zenlayer Elastic Compute', 37684: 'Angani', 206991: 'IXIR', 34989: 'ServeTheWorld', 132372: 'GB Network Solutions',
+    154177: 'LightNode', 24961: 'myLoc (WIIT)', 39486: 'HostRoyale', 207990: 'HostRoyale', 397373: 'H4Y Technologies',
+    200698: 'Globalhost', 52423: 'Data Miners (Racknation)', 56322: 'ServerAstra', 30475: 'Handy Networks',
+    215373: 'Delska', 59787: 'WebSP', 61138: 'Zappie Host', 197540: 'netcup', 214996: 'netcup', 61102: 'Interhost Networks',
+    50613: 'Advania Hosting (Thor DC)', 202425: 'IP Volume', 39020: 'Comvive Servidores', 20860: 'iomart',
+    200019: 'AlexHost', 215311: 'Regxa Cloud', 56655: 'Gigahost', 40021: 'Contabo USA', 61272: 'Bacloud',
+    37738: 'Hostoweb', 51765: 'Crea Nova Datacenter', 268581: 'QNAX Data Center', 398779: 'Ace Host',
+    150249: 'Atharva', 48881: 'DataNode', 395092: 'Shock Hosting', 21100: 'ITL (Route 95)', 204957: 'Green Floid (Route 95)',
+    35758: 'HQserv Networks', 43128: 'Webtasy', 61254: 'Estoxy', 209181: 'Zenex 5ive', 45671: 'Servers Australia',
+    29691: 'Nine Internet Solutions',
 }
 
 # Networks that VPN operators run themselves: everything announced there is VPN infrastructure, whatever the
@@ -415,6 +500,20 @@ VPN_OPERATOR_ASNS = {
     # VPN (RIPE holders "ProtonVPN", "ProtonVPN-2", "PV-HOSTED") and by the hosting rules. AS62371 is Proton's mail
     # and company network and is not listed.
     209103: 'ProtonVPN (Proton AG)', 199218: 'ProtonVPN-2 (Proton AG)', 208172: 'PV-HOSTED (Proton AG)',
+    # VyprVPN: every server in its published list (gluetun) sits in these two networks of Powerhouse Management, the
+    # company that runs VyprVPN (ARIN registrant of AS22363; AS40861 Paradise Networks has Powerhouse as admin contact).
+    22363: 'Powerhouse Management (VyprVPN)', 40861: 'Paradise Networks (Powerhouse Management, VyprVPN)',
+    # From X4BNet lists_vpn's reviewed VPN ASNs (input/vpn/ASN.txt, with issue links), checked on RIPEstat;
+    # ASNs that announce nothing are left out until they do.
+    216025: 'Mullvad VPN AB', 398391: 'Perimeter 81 (Check Point SASE)', 20448: 'Peace Communications (VPNtranet)',
+    32751: 'Nuclearfallout Enterprises (Octovpn)', 401401: 'Unredacted (NoiseNet)', 401720: 'Unredacted',
+    200373: '3xK Tech', 198571: '3xK Tech (PlainProxies)', 207957: 'SERV.HOST', 397282: 'Castle VPN',
+    27683: 'VPN de Mexico', 218908: 'SSS VPN Technical', 208765: 'Bullet Proof VPN', 219329: 'Flash Edge (Flashproxy)',
+    # VPN networks in X4BNet's finished list (it also matches "VPN" in network names) that Intel did not have yet.
+    # Companies whose name merely contains "VPN" (Delta Air Lines' B2B VPN, Nomura's IVPN, Kirkland & Ellis, a police
+    # academy, Comserv PNG, an insurance institute's AOSVPN) and VPNET INC (business unclear) are left out.
+    214879: 'SkyVPN', 214234: 'RoomVPN', 203619: 'IVPN Limited', 209827: 'InfosecVPN', 62635: 'VPNWholesaler (Webistics)',
+    394104: 'IPLockVPN (Westdata)', 60729: 'Torservers.net (Stiftung Erneuerbare Freiheit)',
 }
 
 
@@ -460,6 +559,17 @@ SOURCES = [
            parse_nordvpn, 'Undocumented public API used by its apps, no licence text.', True),
     Source('ivpn', VPN, 'https://api.ivpn.net/v4/servers.json', parse_ivpn, 'Public server list used by its open-source apps, no licence text.', True),
     Source('pia', VPN, 'https://serverlist.piaservers.net/vpninfo/servers/v6', parse_pia, 'Public server list used by its apps, no licence text.', True),
+    # Added 27 November 2026; owner decision: sources are chosen by quality, not by their terms.
+    Source('pia-seen', VPN, GH + 'Lars-/PIA-servers/master/export.csv', parse_pia_seen,
+           'Lars-/PIA-servers, PIA addresses from its rotating DNS; no licence.', True, optional=True),
+    Source('ipapi-exits', VPN, 'https://ipapi.is/vpn-exit-nodes.html', parse_ipapi_exits,
+           'ipapi.is public table of observed VPN exits; its terms restrict reuse.', True, optional=True),
+    Source('vpngate', P2P, 'https://www.vpngate.net/api/iphone/', parse_vpngate,
+           'VPN Gate public server list (University of Tsukuba); P2P label.', True, optional=True),
+    Source('ipapi-p2p', P2P, 'https://ipapi.is/vpn-exit-nodes.html', parse_ipapi_p2p,
+           'ipapi.is public table of observed VPN exits, peer-to-peer providers; P2P label.', True, optional=True),
+    Source('nym', VPN, 'https://mainnet-node-status-api.nymtech.cc/dvpn/v1/directory/gateways/exit', parse_nym,
+           'Public exit-gateway directory used by the NymVPN apps, no licence text.', True, optional=True),
     Source('surfshark', VPN, 'https://api.surfshark.com/v4/server/clusters/generic', parse_surfshark,
            'Public cluster list (host names, resolved by DNS), no licence text.', True),
     # Added 7 October 2026 under the same decision and safeguards (addresses only, attribution, takedown).

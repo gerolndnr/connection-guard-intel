@@ -4,16 +4,17 @@ Lists for recognising VPN, Tor, privacy-relay and hosting addresses, built daily
 
 | List | Meaning in Connection Guard |
 | --- | --- |
-| `vpn.txt` | Commercial VPN servers and exits from 24 operators, the ranges around them, and VPN-dominated data-centre networks: positive |
+| `vpn.txt` | Commercial VPN servers and exits from 25 operators (including NymVPN's exit gateways), observed exits of further VPNs (ipapi.is), the ranges around them, and VPN-dominated data-centre networks: positive |
 | `tor.txt` | Tor exits, kept 3 days after they were last listed: positive |
-| `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting, allowed by default |
+| `relay.txt` | iCloud Private Relay and Cloudflare WARP: its own setting. Connection Guard 0.6.1 lets them in by default; from 0.6.2 they count as VPN by default (`relay: VPN`), because a banned player can switch WARP on to come back |
 | `proxy.txt` | Open proxies named by public proxy lists of at least two different maintainers, kept 7 days: positive. Read by Connection Guard 0.6.1 and later; listed in `manifest.json` under `additional_lists`, which 0.6.0 ignores. Never inside a relay range. |
-| `hosting.txt` | Data centres and clouds: review only, never a VPN verdict on its own. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
+| `hosting.txt` | Data centres and clouds: its own setting. Connection Guard 0.6.1 treats it as review only; from 0.6.2 a hit blocks by default (`hosting: BLOCK`, `REVIEW` restores review only). The list therefore holds no consumer, mobile or transit networks. Data-centre networks dominated by VPN services are in `vpn.txt` instead (see SOURCES.md, Inference). |
 | `booster.txt` | Gaming booster nodes (Mudfish): a label. Connection Guard 0.6.2 lets them in by default (`booster: ALLOW`) or counts them as VPN (`booster: VPN`). Booster nodes are taken out of inferred VPN ranges, so older versions no longer refuse them either; a server a VPN operator publishes stays VPN. |
+| `p2p.txt` | Exits of peer-to-peer VPNs (VPN Gate, Mysterium, Urban VPN, Hola) and NymVPN exit gateways on home connections: other people's home connections, rotating. A label; Connection Guard 0.6.2 counts it as VPN by default (`p2p: VPN`, `ALLOW` lets them in). Exact addresses only, kept 3 days, never inside a relay or mobile network. |
 | `mobile.txt` | Mobile carriers behind carrier-grade NAT: a label. Many players share one address, so `/cg explain` warns that an IP ban or an IP-based alt check hits innocent players there. |
 | `shared.txt` | Exits that many accounts use across several Connection Guard servers (network signals): a review label for alt accounts and residential proxies. Evaluation only until it is measured; not published yet. |
 
-`proxy.txt` and the published labels are listed in `manifest.json` under `additional_lists`, which Connection Guard 0.6.0 ignores; 0.6.1 reads only the proxy list.
+`proxy.txt` and the published labels are listed in `manifest.json` under `additional_lists`, which Connection Guard 0.6.0 ignores; 0.6.1 reads only the proxy list; 0.6.2 also reads the labels.
 
 An address that is on no list is **unknown**, not clean. Connection Guard then asks its next detection service.
 
@@ -21,7 +22,7 @@ An address that is on no list is **unknown**, not clean. Connection Guard then a
 
 **In your own plugin or bot:** [clients/](clients/) has one-file clients for Java, Node.js and Python that verify the signature and check addresses locally.
 
-Lists: `https://intel.connectionguard.net/{vpn,tor,relay,hosting,proxy,booster,mobile}.txt`, `manifest.json` and `manifest.json.sig`, rebuilt daily. Sources, terms and the takedown route are in [SOURCES.md](SOURCES.md); corrections and objections go to legal@connectionguard.net.
+Lists: `https://intel.connectionguard.net/{vpn,tor,relay,hosting,proxy,booster,p2p,mobile}.txt`, `manifest.json` and `manifest.json.sig`, rebuilt daily. Sources, terms and the takedown route are in [SOURCES.md](SOURCES.md); corrections and objections go to legal@connectionguard.net.
 
 ## How it is built
 
