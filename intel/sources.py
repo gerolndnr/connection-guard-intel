@@ -218,8 +218,18 @@ def parse_pia(body):
 
 def parse_nym(body):
     """NymVPN's exit-gateway directory (the one its apps load): every gateway's addresses. The gateways are run by
-    independent node operators, mostly in data centres; each address is a live NymVPN exit, like a Tor exit."""
-    return vpn([ip for g in json.loads(body) for ip in g.get('ip_addresses') or []], 'nym')
+    independent node operators, mostly in data centres; each address is a live NymVPN exit, like a Tor exit. A gateway
+    the directory places in a residential network runs on someone's home connection: it goes to the P2P label with its
+    exact addresses (no /64 around IPv6), so a neighbour on the same line or a later holder of the address is not hit."""
+    gateways = json.loads(body)
+    home = [ip for g in gateways if _nym_kind(g) == 'residential' for ip in g.get('ip_addresses') or []]
+    rest = [ip for g in gateways if _nym_kind(g) != 'residential' for ip in g.get('ip_addresses') or []]
+    return vpn(rest, 'nym') + entries(home, P2P, 'nym')
+
+
+def _nym_kind(gateway):
+    asn = (gateway.get('location') or {}).get('asn')
+    return asn.get('kind') if isinstance(asn, dict) else None
 
 
 def _recent(rows, days):
@@ -242,20 +252,29 @@ def parse_pia_seen(body, days=14):
 IPAPI_P2P = {'mysterium', 'vpngate', 'urban vpn', 'hola vpn', 'hola'}
 
 
+# An exit the table attributes to a carrier's customer NAT pool shares its address with that carrier's customers.
+IPAPI_SHARED_ISP = re.compile(r'\bnat\b|\bcg-?nat\b', re.I)
+
+
 def _ipapi_rows(body):
-    return re.findall(r'<tr><td>([^<]+)</td><td><a [^>]*>([0-9a-fA-F:.]+)</a></td><td>([^<]*)</td>', body.decode('utf-8', 'replace'))
+    """(provider, address, last seen, network name) per row; the network name is the table's last column."""
+    rows = re.findall(r'<tr><td>([^<]+)</td><td><a [^>]*>([0-9a-fA-F:.]+)</a></td><td>([^<]*)</td>(.*?)</tr>',
+                      body.decode('utf-8', 'replace'))
+    return [(p, ip, seen, (re.findall(r'<td>([^<]*)</td>', rest) or [''])[-1]) for p, ip, seen, rest in rows]
 
 
 def parse_ipapi_exits(body, days=7):
-    """ipapi.is's public table of observed VPN exit nodes (commercial providers only)."""
-    keep = [(ip, seen) for provider, ip, seen in _ipapi_rows(body) if provider.strip().lower() not in IPAPI_P2P]
+    """ipapi.is's public table of observed VPN exit nodes (commercial providers only). Exits behind a carrier's
+    customer NAT pool are left out."""
+    keep = [(ip, seen) for provider, ip, seen, isp in _ipapi_rows(body)
+            if provider.strip().lower() not in IPAPI_P2P and not IPAPI_SHARED_ISP.search(isp)]
     return vpn(_recent(keep, days), 'ipapi-exits')
 
 
 def parse_ipapi_p2p(body, days=3):
     """The same table's peer-to-peer exits (Mysterium, VPN Gate, Urban VPN, Hola): home connections that rotate, so
     only the last 3 days, exact addresses only (no /64 around IPv6 exits)."""
-    keep = [(ip, seen) for provider, ip, seen in _ipapi_rows(body) if provider.strip().lower() in IPAPI_P2P]
+    keep = [(ip, seen) for provider, ip, seen, _ in _ipapi_rows(body) if provider.strip().lower() in IPAPI_P2P]
     return entries(_recent(keep, days), P2P, 'ipapi-p2p')
 
 
