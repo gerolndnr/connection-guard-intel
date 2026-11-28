@@ -245,7 +245,7 @@ class Report(unittest.TestCase):
                                                           ('mobile-asn-2', 3, 'ok'), ('operator-asn-1', 9, 'ok')], {'9009': [], '24940': []})
         text, month = report.report(old, new)
         self.assertEqual(month, '2026-10')
-        self.assertIn('# Connection Guard Intel, October 2026', text)
+        self.assertIn('# Connection Guard Intel Local, October 2026', text)
         self.assertIn('| VPN servers and ranges (`vpn.txt`) | 150 | +50 (+50 %) |', text)
         self.assertIn('- 1 operator publishes their servers (1 a month before); together 60 server addresses (+10 (+20 %)).', text)
         self.assertIn('(new: AS24940)', text)
