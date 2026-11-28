@@ -272,14 +272,18 @@ PROXY_MIN_LISTS = 2
 PROXY_HISTORY_DAYS = 7
 
 
-def proxy_networks(entries, groups, relay, path, now):
-    """Collapsed proxy list and how many of its addresses come from the history only."""
-    import ipaddress
+def proxy_agreement(entries, groups):
+    """A proxy listed by two maintainer groups counts once, regardless of protocol mirrors."""
     seen = {}
     for e in entries:
         if e.category == PROXY:
             seen.setdefault(e.network, set()).add(groups.get(e.source, e.source))
-    agreed = {n for n, g in seen.items() if len(g) >= PROXY_MIN_LISTS}
+    return {n for n, g in seen.items() if len(g) >= PROXY_MIN_LISTS}
+
+
+def proxy_networks(entries, groups, relay, path, now):
+    """Collapsed proxy list and how many of its addresses come from the history only."""
+    agreed = proxy_agreement(entries, groups)
     history = {}
     if os.path.exists(path):
         with open(path) as f:

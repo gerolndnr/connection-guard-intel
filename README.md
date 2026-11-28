@@ -56,6 +56,35 @@ The pipeline:
    The last two protect Connection Guard 0.6.0, which rejects such a manifest; new lists go into `additional_lists`.
 7. Signs `manifest.json` with ECDSA P-256 (`INTEL_SIGNING_KEY`).
 
+## Offline proxy confirmation trial
+
+`python -m intel.proxy_trial --baseline <signed-bundle> --inputs <snapshots> --out <new-directory>` tests a
+recent, measured Dahono snapshot against the existing proxy maintainer groups. It adds only exact addresses
+also reported by an existing group or checked by Proxio at the same address and port.
+New entries are never inside the signed relay, mobile or booster ranges. An address
+in the signed baseline remains listed; the trial does not reconstruct or extend the baseline's history.
+Dahono and HProxy are treated as one observation pool, not two corroborating sources.
+
+Each snapshot is a local file with a receipt containing an immutable GitHub raw URL, `committed_at` in UTC
+and `sha256`. Put Dahono's `proxies/proxies.json` at `confirmation.json`, and the existing feeds at
+`existing/<source-id>`. `receipts.json` contains a `confirmation` receipt and a `sources` array of receipts
+with the additional field `id`, matching the entries in `intel.sources.PROXY_SOURCES`. All snapshots must
+be from before or at the signed baseline's `as_of`; the confirmation must be at most six hours old. An optional
+`secondary` receipt pins the Proxio `all.json` export at `proxio.json`. Only successful Proxio observations
+from the last 24 hours count, and never without a matching primary endpoint.
+Proxy check data by [proxio.io](https://proxio.io/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)):
+this trial filters observations and writes only exact IPs, not ports or other upstream fields.
+
+The result is marked `evaluation_only`, written unsigned, and isolated from the production build and its
+history. A successful replay is not clearance to redistribute the feed.
+
+**Shadow measurement (since 27 November 2026).** The `proxy shadow` workflow runs the trial every day after the
+build (`python -m intel.proxy_shadow`): it pins the inputs to the newest commits before the signed published lists,
+builds the candidate and records counts on the branch `shadow`, never addresses. Per day: how many addresses the
+trial would add, how many of them lie outside every hosting range, and how many of each earlier day's additions the
+published `proxy.txt` lists 1, 3 and 7 days later. The additions themselves stay in the workflow's cache for 14 days.
+monosans keeps a single commit and cannot be pinned before the baseline, so it does not vote in the trial.
+
 ## Evaluation (7 October 2026)
 
 Scored on the [mc-antivpn-bench](https://github.com/gerolndnr/mc-antivpn-bench) dataset `detection-v1`, 692 labelled addresses, locally with `python -m intel.evaluate`:
